@@ -1,0 +1,41 @@
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "name": "Dr. Evelyn Reed",
+    "title": "Senior AI Researcher",
+    "institution": "Synth-Intell Labs",
+    "email": "evelyn.reed@synthintell.com",
+    "bio": "Pioneering researcher in neural network architecture with over 15 years of experience in machine learning and computational linguistics. Published in numerous top-tier journals.",
+    "expertise_areas": ["Natural Language Processing", "Deep Learning", "Ethical AI"],
+    "profile_image": "https://randomuser.me/api/portraits/women/44.jpg",
+    "linkedin_url": "https://linkedin.com/in/evelynreed",
+    "influence_score": 95,
+    "node_position": { "x": 100, "y": 150 }
+  },
+  {
+    "id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+    "name": "Dr. Marcus Thorne",
+    "title": "Professor of Robotics",
+    "institution": "Cybernetics Institute",
+    "email": "marcus.thorne@cybernetics.edu",
+    "bio": "Expert in autonomous systems and human-robot interaction. Leads the Advanced Robotics Initiative, focusing on creating collaborative robots for complex environments.",
+    "expertise_areas": ["Robotics", "Computer Vision", "Autonomous Systems"],
+    "profile_image": "https://randomuser.me/api/portraits/men/45.jpg",
+    "linkedin_url": "https://linkedin.com/in/marcusthorne",
+    "influence_score": 92,
+    "node_position": { "x": 250, "y": 100 }
+  },
+  {
+    "id": "c3d4e5f6-a7b8-9012-3456-7890abcdef2",
+    "name": "Dr. Jian Li",
+    "title": "Quantum Computing Scientist",
+    "institution": "QuantumLeap Inc.",
+    "email": "jian.li@quantumleap.com",
+    "bio": "Specializes in quantum algorithm development and quantum supremacy research. A key contributor to the development of QuantumLeap's flagship quantum processor.",
+    "expertise_areas": ["Quantum Computing", "Algorithm Design", "Cryptography"],
+    "profile_image": "https://randomuser.me/api/portraits/men/46.jpg",
+    "linkedin_url": "https://linkedin.com/in/jianli",
+    "influence_score": 88,
+    "node_position": { "x": 180, "y": 300 }
+  }
+]

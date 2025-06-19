@@ -1,0 +1,32 @@
+[
+  {
+    "person_a_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "person_b_id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+    "connection_type": "coauthor",
+    "strength": 8,
+    "context": "Published a paper on 'Cross-Modal Attention in Robotics'",
+    "shared_projects": ["Project Phoenix"],
+    "interaction_date": "2023-11-20",
+    "topics": ["Computer Vision", "Robotics"]
+  },
+  {
+    "person_a_id": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+    "person_b_id": "c3d4e5f6-a7b8-9012-3456-7890abcdef2",
+    "connection_type": "collaborator",
+    "strength": 7,
+    "context": "Collaborated on a grant proposal for Quantum NLP",
+    "shared_projects": ["Quantum NLP Initiative"],
+    "interaction_date": "2024-01-15",
+    "topics": ["Quantum Computing", "Natural Language Processing"]
+  },
+  {
+    "person_a_id": "b2c3d4e5-f6a7-8901-2345-67890abcdef1",
+    "person_b_id": "c3d4e5f6-a7b8-9012-3456-7890abcdef2",
+    "connection_type": "colleague",
+    "strength": 9,
+    "context": "Both are senior members at the Future-Tech Consortium",
+    "shared_projects": [],
+    "interaction_date": "2024-02-05",
+    "topics": ["AI Governance", "Quantum Computing"]
+  }
+]
