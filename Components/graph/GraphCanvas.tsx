@@ -26,16 +26,12 @@ export default function GraphCanvas({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map()).current;
 
   const connectionColors: { [key: string]: string } = {
-    colleague: '#22c55e',
-    coauthor: '#f59e0b',
-    collaborator: '#60a5fa',
-    advisor: '#a855f7',
-    mentee: '#c084fc',
-    attendee: '#6b7280',
-    speaker: '#ec4899',
-    organizer: '#f97316'
+    work: '#eab308',
+    education: '#fb7185',
+    publication: '#38bdf8'
   };
 
   // Generate random positions for nodes if they don't have positions
@@ -180,6 +176,23 @@ export default function GraphCanvas({
         }
         ctx.fillStyle = gradient;
         ctx.fill();
+
+        if (node.avatar) {
+          let img = imageCache.get(node.avatar);
+          if (!img) {
+            img = new Image();
+            img.src = node.avatar;
+            imageCache.set(node.avatar, img);
+          }
+          if (img.complete) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, radius - 1, 0, 2 * Math.PI);
+            ctx.clip();
+            ctx.drawImage(img, x - radius + 1, y - radius + 1, (radius - 1) * 2, (radius - 1) * 2);
+            ctx.restore();
+          }
+        }
 
         // Node border
         ctx.beginPath();

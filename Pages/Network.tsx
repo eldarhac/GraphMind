@@ -2,20 +2,17 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
 import GraphCanvas from "../Components/graph/GraphCanvas";
+import { supabaseClient } from "@/integrations/supabase-client";
+import { transformGraphData } from "@/integrations/common/transformGraphData";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import { Search, Filter, Users, Network as NetworkIcon } from "lucide-react";
 
 const connectionColors = {
-  colleague: '#22c55e',
-  coauthor: '#f59e0b',
-  collaborator: '#60a5fa',
-  advisor: '#a855f7',
-  mentee: '#c084fc',
-  attendee: '#6b7280',
-  speaker: '#ec4899',
-  organizer: '#f97316'
+  work: '#eab308',
+  education: '#fb7185',
+  publication: '#38bdf8'
 };
 
 export default function NetworkPage() {
@@ -37,12 +34,11 @@ export default function NetworkPage() {
   const loadGraphData = async () => {
     setIsLoading(true);
     try {
-      const [nodes, connections] = await Promise.all([
-        Person.list(),
-        Promise.resolve([]) // Temporarily disable loading connections from mock data
-      ]);
-      
-      setGraphData({ nodes, connections });
+      const raw = await supabaseClient.getGraphData();
+      if (raw) {
+        const transformed = transformGraphData(raw);
+        setGraphData(transformed);
+      }
     } catch (error) {
       console.error('Error loading graph data:', error);
     } finally {
@@ -155,14 +151,9 @@ export default function NetworkPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Connections</SelectItem>
-              <SelectItem value="colleague">Colleagues</SelectItem>
-              <SelectItem value="coauthor">Co-authors</SelectItem>
-              <SelectItem value="collaborator">Collaborators</SelectItem>
-              <SelectItem value="advisor">Advisors</SelectItem>
-              <SelectItem value="mentee">Mentees</SelectItem>
-              <SelectItem value="attendee">Event Attendees</SelectItem>
-              <SelectItem value="speaker">Speakers</SelectItem>
-              <SelectItem value="organizer">Organizers</SelectItem>
+              <SelectItem value="work">Work</SelectItem>
+              <SelectItem value="education">Education</SelectItem>
+              <SelectItem value="publication">Publications</SelectItem>
             </SelectContent>
           </Select>
         </div>

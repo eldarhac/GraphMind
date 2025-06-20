@@ -10,6 +10,46 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
+export type RawGraphData = {
+  participants: any[];
+  connections: any[];
+  avatars: any[];
+};
+
+async function getGraphData(): Promise<RawGraphData | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const [participantsRes, connectionsRes, avatarsRes] = await Promise.all([
+      supabase.from('participants2').select('*'),
+      supabase.from('connections').select('*'),
+      supabase.from('avatars').select('*'),
+    ]);
+
+    if (participantsRes.error) {
+      console.error('Error fetching participants:', participantsRes.error);
+      return null;
+    }
+    if (connectionsRes.error) {
+      console.error('Error fetching connections:', connectionsRes.error);
+      return null;
+    }
+    if (avatarsRes.error) {
+      console.error('Error fetching avatars:', avatarsRes.error);
+      return null;
+    }
+
+    return {
+      participants: participantsRes.data || [],
+      connections: connectionsRes.data || [],
+      avatars: avatarsRes.data || [],
+    };
+  } catch (err) {
+    console.error('Unexpected error loading graph data from Supabase:', err);
+    return null;
+  }
+}
+
 async function getParticipantDetails(personName: string): Promise<Person[] | null> {
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
@@ -136,4 +176,5 @@ export const supabaseClient = {
     getParticipantDetails,
     executeSql,
     getAllParticipants,
-}; 
+    getGraphData,
+};
