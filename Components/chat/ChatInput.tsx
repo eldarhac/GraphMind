@@ -21,7 +21,7 @@ export default function ChatInput({ onSendMessage, isProcessing }: ChatInputProp
     setInputValue(suggestion);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (inputValue.trim() && !isProcessing) {
       onSendMessage(inputValue);
