@@ -1,4 +1,4 @@
-import React from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 
 // A simplified version of shadcn's button with variants
 const buttonVariants = {
@@ -17,12 +17,12 @@ const sizeVariants = {
   icon: "h-10 w-10",
 };
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: keyof typeof buttonVariants;
   size?: keyof typeof sizeVariants;
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "default", size = "default", ...props }, ref) => {
     const variantClass = buttonVariants[variant] || buttonVariants.default;
     const sizeClass = sizeVariants[size] || sizeVariants.default;

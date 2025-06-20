@@ -1,8 +1,8 @@
-import React from 'react';
+import { forwardRef, type InputHTMLAttributes } from 'react';
 
-export const Input = React.forwardRef<
+export const Input = forwardRef<
   HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
+  InputHTMLAttributes<HTMLInputElement>
 >(({ className, ...props }, ref) => {
   return (
     <input

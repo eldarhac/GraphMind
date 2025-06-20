@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'framer-motion';
 import { User, Sparkles, Clock } from 'lucide-react';
 import { format, isValid } from 'date-fns';

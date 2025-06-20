@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react";
 import { User } from "@/Entities/User";
 import { Person, Connection } from "@/Entities/all";
 import { Button } from "@/Components/ui/button";
@@ -104,7 +104,7 @@ export default function ProfilePage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSaving(true);
     
@@ -188,7 +188,7 @@ export default function ProfilePage() {
                       </label>
                       <Input
                         value={formData.name}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           handleInputChange('name', e.target.value)
                         }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
@@ -201,7 +201,7 @@ export default function ProfilePage() {
                       </label>
                       <Input
                         value={formData.title}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           handleInputChange('title', e.target.value)
                         }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
@@ -216,7 +216,7 @@ export default function ProfilePage() {
                     </label>
                     <Input
                       value={formData.institution}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
                         handleInputChange('institution', e.target.value)
                       }
                       className="bg-slate-800/50 border-slate-700/50 text-white"
@@ -230,7 +230,7 @@ export default function ProfilePage() {
                     </label>
                     <Textarea
                       value={formData.bio}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
                         handleInputChange('bio', e.target.value)
                       }
                       className="bg-slate-800/50 border-slate-700/50 text-white h-24"
@@ -244,7 +244,7 @@ export default function ProfilePage() {
                     </label>
                     <Input
                       value={formData.linkedin_url}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      onChange={(e: ChangeEvent<HTMLInputElement>) =>
                         handleInputChange('linkedin_url', e.target.value)
                       }
                       className="bg-slate-800/50 border-slate-700/50 text-white"
@@ -260,12 +260,12 @@ export default function ProfilePage() {
                     <div className="flex gap-2 mb-3">
                       <Input
                         value={newExpertise}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           setNewExpertise(e.target.value)
                         }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
                         placeholder="Add an expertise area..."
-                        onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) =>
+                        onKeyPress={(e: KeyboardEvent<HTMLInputElement>) =>
                           e.key === 'Enter' && (e.preventDefault(), addExpertise())
                         }
                       />

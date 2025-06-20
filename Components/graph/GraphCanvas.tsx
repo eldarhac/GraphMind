@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, type MouseEvent, type WheelEvent } from 'react';
 import { motion } from 'framer-motion';
 import { ZoomIn, ZoomOut, Maximize, Filter } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
@@ -216,7 +216,7 @@ export default function GraphCanvas({
     };
   }, [positionedNodes, connections, highlightedNodes, highlightedConnections, zoom, offset]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: MouseEvent) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left - offset.x) / zoom;
@@ -240,7 +240,7 @@ export default function GraphCanvas({
     setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: MouseEvent) => {
     if (isDragging) {
       setOffset({
         x: e.clientX - dragStart.x,
@@ -253,7 +253,7 @@ export default function GraphCanvas({
     setIsDragging(false);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
+  const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     const newZoom = Math.max(0.1, Math.min(3, zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
     setZoom(newZoom);

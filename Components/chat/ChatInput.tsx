@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 
@@ -21,7 +21,7 @@ export default function ChatInput({ onSendMessage, isProcessing }: ChatInputProp
     setInputValue(suggestion);
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (inputValue.trim() && !isProcessing) {
       onSendMessage(inputValue);

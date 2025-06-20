@@ -1,4 +1,3 @@
-import React from 'react';
 import { InvokeLLM } from '@/integrations/Core';
 import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
