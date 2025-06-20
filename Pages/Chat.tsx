@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { supabaseClient } from "@/integrations/supabase-client";
-import { transformGraphData } from "@/integrations/common/transformGraphData";
+import { transformSupabaseData } from "@/services/dataTransformer";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
@@ -30,13 +30,21 @@ export default function ChatPage() {
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      const raw = await supabaseClient.getGraphData();
-      if (raw) {
-        const transformed = transformGraphData(raw);
-        setGraphData(transformed);
-        if (transformed.nodes.length > 0) {
-          setCurrentUser(transformed.nodes[0]);
-        }
+      const [participants, connections, avatars] = await Promise.all([
+        supabaseClient.getAllParticipants(),
+        supabaseClient.getConnections(),
+        supabaseClient.getAvatars(),
+      ]);
+
+      const { nodes, connections: links } = transformSupabaseData(
+        participants || [],
+        connections || [],
+        avatars || []
+      );
+
+      setGraphData({ nodes, connections: links });
+      if (nodes.length > 0) {
+        setCurrentUser(nodes[0]);
       }
     } catch (error) {
       console.error('Error loading graph data:', error);
