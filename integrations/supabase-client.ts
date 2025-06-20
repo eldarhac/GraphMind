@@ -28,7 +28,7 @@ async function getParticipantDetails(personName: string): Promise<Person[] | nul
     if (!data) return [];
 
     // Safely parse JSON string fields for each returned person
-    const parsedData = data.map(person => ({
+    const parsedData = data.map((person: any) => ({
       ...person,
       current_com_experience: safeJsonParse(person.current_com_experience),
       education: safeJsonParse(person.education),

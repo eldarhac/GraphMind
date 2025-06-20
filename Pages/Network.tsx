@@ -1,10 +1,10 @@
 // @ts-nocheck
 import React, { useState, useEffect } from "react";
-import { Person, Connection } from "@/entities/all";
+import { Person, Connection } from "@/Entities/all";
 import GraphCanvas from "../components/graph/GraphCanvas";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/Components/ui/button";
+import { Input } from "@/Components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import { Search, Filter, Users, Network as NetworkIcon } from "lucide-react";
 
 const connectionColors = {

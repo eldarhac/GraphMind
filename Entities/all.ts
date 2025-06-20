@@ -8,10 +8,12 @@ export interface Person {
   title: string;
   company?: string;
   institution?: string;
+  email?: string;
   profile_picture_url: string;
   linkedin_url: string;
   expertise_areas: string[];
   interests?: string[];
+  bio?: string;
   influence_score?: number;
   node_position?: { x: number; y: number; };
 }
@@ -103,6 +105,7 @@ export class Person extends BaseModel {
             name: participant.name || 'Unknown',
             title: participant.current_project || 'No title available',
             institution: 'Unknown Institution', // Add if available in your schema
+            email: participant.email || '',
             profile_picture_url: 'https://randomuser.me/api/portraits/men/1.jpg', // Default image
             linkedin_url: participant['linkedin-url'] || '#',
             expertise_areas: [], // You can extract this from bio or other fields if needed

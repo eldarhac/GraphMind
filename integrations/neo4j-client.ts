@@ -27,7 +27,7 @@ async function fetchAllData(): Promise<{ nodes: Person[], connections: Connectio
     const nodesMap = new Map<string, Person>();
     const connectionsMap = new Map<string, Connection>();
 
-    result.records.forEach(record => {
+    result.records.forEach((record: any) => {
       const personNode = record.get('p');
       if (personNode) {
         const nodeId = personNode.elementId;
