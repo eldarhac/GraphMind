@@ -27,7 +27,7 @@ export async function callOpenAI(prompt: string, jsonSchema?: any): Promise<any>
     ];
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-4.1-mini",
       messages: messages,
       response_format: jsonSchema ? { type: "json_object" } : { type: "text" },
     });

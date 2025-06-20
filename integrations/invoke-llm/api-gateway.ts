@@ -1,6 +1,5 @@
 import { augmentPrompt } from './context-manager';
 import { callProvider, LLMProvider } from './llm-providers';
-import { parseAndValidate } from './json-validator';
 
 // Mock API Gateway. In a real app, this would be a backend service.
 export async function routeRequest(params: {
@@ -32,11 +31,6 @@ export async function routeRequest(params: {
   console.log(`[API Gateway] Routing to provider: ${provider}`);
   const rawResponse = await callProvider(finalPrompt, provider, params.response_json_schema);
 
-  // 5. Parse/Validate JSON if schema is provided
-  // Bypassing broken validator for now. The OpenAI 'json_object' mode is reliable.
-  // if (params.response_json_schema) {
-  //   return parseAndValidate(rawResponse, params.response_json_schema);
-  // }
 
   return rawResponse;
 } 

@@ -1,12 +1,26 @@
 import React from 'react';
 import { InvokeLLM } from '@/integrations/Core';
 import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult } from '@/Entities/all';
+import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 
 export default class QueryProcessor {
   static async processQuery(message: string, currentUser: Person, graphData: { nodes: Person[], connections: Connection[] }) {
     const startTime = Date.now();
     
     try {
+      // Temporarily bypass the intent/graph logic to route directly to Text-to-SQL
+      const sqlResponse = await processTextToSqlQuery(message);
+
+      const processingTime = Date.now() - startTime;
+      
+      return {
+        response: sqlResponse,
+        intent: "text_to_sql", // A new intent for our new flow
+        graphAction: null, // No graph action for now
+        processingTime
+      };
+
+      /*
       // Step 1: Extract intent and entities from user message
       const personNames = graphData.nodes.map(n => n.name);
       const intentResult: IntentData = await InvokeLLM({
@@ -87,7 +101,7 @@ export default class QueryProcessor {
         graphAction: this.generateGraphAction(intentResult, graphResults),
         processingTime
       };
-
+      */
     } catch (error) {
       console.error('Query processing error:', error);
       return {

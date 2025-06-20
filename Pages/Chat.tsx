@@ -28,7 +28,7 @@ export default function ChatPage() {
     try {
       const [nodes, connections] = await Promise.all([
         Person.list(),
-        Connection.list()
+        Promise.resolve([]) // Temporarily disable loading connections from mock data
       ]);
       
       setGraphData({ nodes, connections });
