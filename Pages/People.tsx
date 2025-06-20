@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { Person, Connection } from "@/entities/all";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Person, Connection } from "@/Entities/all";
+import { Button } from "@/Components/ui/button";
+import { Input } from "@/Components/ui/input";
+import { Card, CardContent, CardHeader } from "@/Components/ui/card";
+import { Badge } from "@/Components/ui/badge";
 import { Search, Users, Plus, ExternalLink, Network } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function PeoplePage() {
-  const [people, setPeople] = useState([]);
-  const [connections, setConnections] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     loadData();
@@ -22,7 +22,7 @@ export default function PeoplePage() {
     setIsLoading(true);
     try {
       const [peopleData, connectionsData] = await Promise.all([
-        Person.list('-updated_date'),
+        Person.list(),
         Connection.list()
       ]);
       setPeople(peopleData);
@@ -34,29 +34,29 @@ export default function PeoplePage() {
     }
   };
 
-  const filteredPeople = people.filter(person =>
+  const filteredPeople = people.filter((person) =>
     person.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     person.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     person.institution?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    person.expertise_areas?.some(area => 
+    person.expertise_areas?.some((area) =>
       area.toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
 
-  const getPersonConnections = (personId) => {
-    return connections.filter(conn =>
-      conn.person_a_id === personId || conn.person_b_id === personId
+  const getPersonConnections = (personId: string): Connection[] => {
+    return connections.filter(
+      (conn) => conn.person_a_id === personId || conn.person_b_id === personId
     );
   };
 
-  const getConnectionCount = (personId) => {
+  const getConnectionCount = (personId: string): number => {
     return getPersonConnections(personId).length;
   };
 
-  const getInfluenceScore = (person) => {
+  const getInfluenceScore = (person: Person): number => {
     const connectionCount = getConnectionCount(person.id);
     const expertiseBonus = person.expertise_areas?.length || 0;
-    return Math.round((connectionCount * 10) + (expertiseBonus * 5));
+    return Math.round(connectionCount * 10 + expertiseBonus * 5);
   };
 
   if (isLoading) {
@@ -95,7 +95,9 @@ export default function PeoplePage() {
             <Input
               placeholder="Search by name, title, institution, or expertise..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setSearchTerm(e.target.value)
+              }
               className="pl-10 bg-slate-800/50 border-slate-700/50 text-white placeholder-slate-400"
             />
           </div>
@@ -115,9 +117,9 @@ export default function PeoplePage() {
                 <Card className="glass-effect border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 cursor-pointer group">
                   <CardHeader className="pb-3">
                     <div className="flex items-start gap-4">
-                      {person.profile_image ? (
+                      {person.profile_picture_url ? (
                         <img
-                          src={person.profile_image}
+                          src={person.profile_picture_url}
                           alt={person.name}
                           className="w-14 h-14 rounded-full object-cover"
                         />
@@ -240,7 +242,7 @@ export default function PeoplePage() {
           <Card className="glass-effect border-slate-700/50">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-purple-400 mb-1">
-                {[...new Set(people.flatMap(p => p.expertise_areas || []))].length}
+                {[...new Set(people.flatMap((p: Person) => p.expertise_areas || []))].length}
               </div>
               <div className="text-sm text-slate-400">Expertise Areas</div>
             </CardContent>
@@ -248,7 +250,7 @@ export default function PeoplePage() {
           <Card className="glass-effect border-slate-700/50">
             <CardContent className="p-6 text-center">
               <div className="text-2xl font-bold text-pink-400 mb-1">
-                {[...new Set(people.map(p => p.institution).filter(Boolean))].length}
+                {[...new Set(people.map((p: Person) => p.institution).filter(Boolean))].length}
               </div>
               <div className="text-sm text-slate-400">Institutions</div>
             </CardContent>

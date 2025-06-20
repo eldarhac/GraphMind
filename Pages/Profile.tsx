@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { User } from "@/entities/User";
-import { Person, Connection } from "@/entities/all";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { User } from "@/Entities/User";
+import { Person, Connection } from "@/Entities/all";
+import { Button } from "@/Components/ui/button";
+import { Input } from "@/Components/ui/input";
+import { Textarea } from "@/Components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/Components/ui/card";
+import { Badge } from "@/Components/ui/badge";
 import { User as UserIcon, Save, Settings, Network, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function ProfilePage() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [connections, setConnections] = useState([]);
-  const [formData, setFormData] = useState({
+  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; full_name?: string; role?: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<Person | null>(null);
+  const [connections, setConnections] = useState<Connection[]>([]);
+
+  interface ProfileFormData {
+    name: string;
+    title: string;
+    institution: string;
+    bio: string;
+    expertise_areas: string[];
+    linkedin_url: string;
+  }
+
+  const [formData, setFormData] = useState<ProfileFormData>({
     name: '',
     title: '',
     institution: '',
@@ -21,9 +31,9 @@ export default function ProfilePage() {
     expertise_areas: [],
     linkedin_url: ''
   });
-  const [newExpertise, setNewExpertise] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [newExpertise, setNewExpertise] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
     loadUserData();
@@ -37,7 +47,7 @@ export default function ProfilePage() {
 
       // Try to find user's profile in Person entity
       const people = await Person.list();
-      const profile = people.find(p => p.email === user.email);
+      const profile = people.find((p: Person) => p.email === user.email);
       
       if (profile) {
         setUserProfile(profile);
@@ -52,13 +62,13 @@ export default function ProfilePage() {
 
         // Load user's connections
         const allConnections = await Connection.list();
-        const userConnections = allConnections.filter(conn =>
+        const userConnections = allConnections.filter((conn: Connection) =>
           conn.person_a_id === profile.id || conn.person_b_id === profile.id
         );
         setConnections(userConnections);
       } else {
         // Initialize with user data if no profile exists
-        setFormData(prev => ({
+        setFormData((prev: ProfileFormData) => ({
           ...prev,
           name: user.full_name || ''
         }));
@@ -70,8 +80,8 @@ export default function ProfilePage() {
     }
   };
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({
+  const handleInputChange = (field: keyof ProfileFormData, value: string) => {
+    setFormData((prev: ProfileFormData) => ({
       ...prev,
       [field]: value
     }));
@@ -79,7 +89,7 @@ export default function ProfilePage() {
 
   const addExpertise = () => {
     if (newExpertise.trim() && !formData.expertise_areas.includes(newExpertise.trim())) {
-      setFormData(prev => ({
+      setFormData((prev: ProfileFormData) => ({
         ...prev,
         expertise_areas: [...prev.expertise_areas, newExpertise.trim()]
       }));
@@ -87,21 +97,21 @@ export default function ProfilePage() {
     }
   };
 
-  const removeExpertise = (expertise) => {
-    setFormData(prev => ({
+  const removeExpertise = (expertise: string) => {
+    setFormData((prev: ProfileFormData) => ({
       ...prev,
       expertise_areas: prev.expertise_areas.filter(e => e !== expertise)
     }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     
     try {
       const profileData = {
         ...formData,
-        email: currentUser.email
+        email: currentUser?.email || ''
       };
 
       if (userProfile) {
@@ -125,8 +135,8 @@ export default function ProfilePage() {
       return { totalConnections: 0, strongConnections: 0, connectionTypes: 0 };
     }
 
-    const strongConnections = connections.filter(conn => conn.strength >= 7).length;
-    const connectionTypes = [...new Set(connections.map(c => c.connection_type))].length;
+    const strongConnections = connections.filter((conn: Connection) => conn.strength >= 7).length;
+    const connectionTypes = [...new Set(connections.map((c: Connection) => c.connection_type))].length;
 
     return {
       totalConnections: connections.length,
@@ -178,7 +188,9 @@ export default function ProfilePage() {
                       </label>
                       <Input
                         value={formData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          handleInputChange('name', e.target.value)
+                        }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
                         placeholder="Your full name"
                       />
@@ -189,7 +201,9 @@ export default function ProfilePage() {
                       </label>
                       <Input
                         value={formData.title}
-                        onChange={(e) => handleInputChange('title', e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          handleInputChange('title', e.target.value)
+                        }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
                         placeholder="e.g., Senior Data Scientist"
                       />
@@ -202,7 +216,9 @@ export default function ProfilePage() {
                     </label>
                     <Input
                       value={formData.institution}
-                      onChange={(e) => handleInputChange('institution', e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        handleInputChange('institution', e.target.value)
+                      }
                       className="bg-slate-800/50 border-slate-700/50 text-white"
                       placeholder="Current workplace"
                     />
@@ -214,7 +230,9 @@ export default function ProfilePage() {
                     </label>
                     <Textarea
                       value={formData.bio}
-                      onChange={(e) => handleInputChange('bio', e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                        handleInputChange('bio', e.target.value)
+                      }
                       className="bg-slate-800/50 border-slate-700/50 text-white h-24"
                       placeholder="Brief description of your work and interests..."
                     />
@@ -226,7 +244,9 @@ export default function ProfilePage() {
                     </label>
                     <Input
                       value={formData.linkedin_url}
-                      onChange={(e) => handleInputChange('linkedin_url', e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                        handleInputChange('linkedin_url', e.target.value)
+                      }
                       className="bg-slate-800/50 border-slate-700/50 text-white"
                       placeholder="https://linkedin.com/in/..."
                     />
@@ -240,10 +260,14 @@ export default function ProfilePage() {
                     <div className="flex gap-2 mb-3">
                       <Input
                         value={newExpertise}
-                        onChange={(e) => setNewExpertise(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setNewExpertise(e.target.value)
+                        }
                         className="bg-slate-800/50 border-slate-700/50 text-white"
                         placeholder="Add an expertise area..."
-                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addExpertise())}
+                        onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) =>
+                          e.key === 'Enter' && (e.preventDefault(), addExpertise())
+                        }
                       />
                       <Button
                         type="button"
@@ -255,7 +279,7 @@ export default function ProfilePage() {
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {formData.expertise_areas.map((area, index) => (
+                      {formData.expertise_areas.map((area: string, index: number) => (
                         <Badge
                           key={index}
                           variant="secondary"
