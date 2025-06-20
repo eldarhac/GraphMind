@@ -1,8 +1,14 @@
-import React from 'react';
+import {
+  forwardRef,
+  type SelectHTMLAttributes,
+  type HTMLAttributes,
+  type ButtonHTMLAttributes,
+  type OptionHTMLAttributes,
+} from 'react';
 
-export const Select = React.forwardRef<
+export const Select = forwardRef<
   HTMLSelectElement,
-  React.SelectHTMLAttributes<HTMLSelectElement>
+  SelectHTMLAttributes<HTMLSelectElement>
 >(({ className, children, ...props }, ref) => {
   return (
     <select
@@ -16,33 +22,33 @@ export const Select = React.forwardRef<
 });
 Select.displayName = 'Select';
 
-export const SelectValue = React.forwardRef<
+export const SelectValue = forwardRef<
   HTMLSpanElement,
-  React.HTMLAttributes<HTMLSpanElement>
+  HTMLAttributes<HTMLSpanElement>
 >(({ children, ...props }, ref) => {
   return <span ref={ref} {...props}>{children}</span>;
 });
 SelectValue.displayName = 'SelectValue';
 
-export const SelectTrigger = React.forwardRef<
+export const SelectTrigger = forwardRef<
   HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement>
+  ButtonHTMLAttributes<HTMLButtonElement>
 >(({ children, ...props }, ref) => {
     return <button ref={ref} {...props}>{children}</button>
 });
 SelectTrigger.displayName = 'SelectTrigger';
 
-export const SelectContent = React.forwardRef<
+export const SelectContent = forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement>
+  HTMLAttributes<HTMLDivElement>
 >(({ children, ...props }, ref) => {
     return <div ref={ref} {...props}>{children}</div>;
 });
 SelectContent.displayName = 'SelectContent';
 
-export const SelectItem = React.forwardRef<
+export const SelectItem = forwardRef<
   HTMLOptionElement,
-  React.OptionHTMLAttributes<HTMLOptionElement>
+  OptionHTMLAttributes<HTMLOptionElement>
 >(({ children, ...props }, ref) => {
     return <option ref={ref} {...props}>{children}</option>
 });

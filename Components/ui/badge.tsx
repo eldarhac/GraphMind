@@ -1,10 +1,10 @@
-import React from 'react';
+import { type HTMLAttributes } from 'react';
 
 function Badge({
   className,
   variant,
   ...props
-}: React.HTMLAttributes<HTMLDivElement> & {
+}: HTMLAttributes<HTMLDivElement> & {
   variant?: 'default' | 'secondary' | 'destructive' | 'outline';
 }) {
   return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageBubble from "@/Components/chat/MessageBubble";

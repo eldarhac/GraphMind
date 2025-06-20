@@ -1,7 +1,7 @@
 // @ts-nocheck
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
-import GraphCanvas from "../components/graph/GraphCanvas";
+import GraphCanvas from "../Components/graph/GraphCanvas";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";

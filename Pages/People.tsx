@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
@@ -95,7 +95,7 @@ export default function PeoplePage() {
             <Input
               placeholder="Search by name, title, institution, or expertise..."
               value={searchTerm}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
                 setSearchTerm(e.target.value)
               }
               className="pl-10 bg-slate-800/50 border-slate-700/50 text-white placeholder-slate-400"
