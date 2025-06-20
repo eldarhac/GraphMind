@@ -3,16 +3,16 @@ import { useState, useEffect, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
 import GraphCanvas from "../Components/graph/GraphCanvas";
 import { supabaseClient } from "@/integrations/supabase-client";
-import { transformGraphData } from "@/integrations/common/transformGraphData";
+import { transformSupabaseData } from "@/services/dataTransformer";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import { Search, Filter, Users, Network as NetworkIcon } from "lucide-react";
 
 const connectionColors = {
-  work: '#eab308',
-  education: '#fb7185',
-  publication: '#38bdf8'
+  work: '#FFC107',
+  education: '#F44336',
+  publication: '#2196F3'
 };
 
 export default function NetworkPage() {
@@ -34,11 +34,18 @@ export default function NetworkPage() {
   const loadGraphData = async () => {
     setIsLoading(true);
     try {
-      const raw = await supabaseClient.getGraphData();
-      if (raw) {
-        const transformed = transformGraphData(raw);
-        setGraphData(transformed);
-      }
+      const [participants, connections, avatars] = await Promise.all([
+        supabaseClient.getAllParticipants(),
+        supabaseClient.getConnections(),
+        supabaseClient.getAvatars(),
+      ]);
+
+      const { nodes, connections: links } = transformSupabaseData(
+        participants || [],
+        connections || [],
+        avatars || []
+      );
+      setGraphData({ nodes, connections: links });
     } catch (error) {
       console.error('Error loading graph data:', error);
     } finally {

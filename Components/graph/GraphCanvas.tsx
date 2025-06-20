@@ -29,9 +29,9 @@ export default function GraphCanvas({
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map()).current;
 
   const connectionColors: { [key: string]: string } = {
-    work: '#eab308',
-    education: '#fb7185',
-    publication: '#38bdf8'
+    work: '#FFC107',
+    education: '#F44336',
+    publication: '#2196F3'
   };
 
   // Generate random positions for nodes if they don't have positions

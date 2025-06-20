@@ -16,6 +16,38 @@ export type RawGraphData = {
   avatars: any[];
 };
 
+async function getConnections(): Promise<any[] | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const { data, error } = await supabase.from('connections').select('*');
+    if (error) {
+      console.error('Error fetching connections from Supabase:', error);
+      return null;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Unexpected error loading connections from Supabase:', err);
+    return null;
+  }
+}
+
+async function getAvatars(): Promise<any[] | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const { data, error } = await supabase.from('avatars').select('*');
+    if (error) {
+      console.error('Error fetching avatars from Supabase:', error);
+      return null;
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Unexpected error loading avatars from Supabase:', err);
+    return null;
+  }
+}
+
 async function getGraphData(): Promise<RawGraphData | null> {
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
@@ -176,5 +208,7 @@ export const supabaseClient = {
     getParticipantDetails,
     executeSql,
     getAllParticipants,
+    getConnections,
+    getAvatars,
     getGraphData,
 };
