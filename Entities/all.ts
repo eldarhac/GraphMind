@@ -10,6 +10,7 @@ export interface Person {
   institution?: string;
   email?: string;
   profile_picture_url: string;
+  avatar?: string;
   linkedin_url: string;
   expertise_areas: string[];
   interests?: string[];

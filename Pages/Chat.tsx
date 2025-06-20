@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
+import { supabaseClient } from "@/integrations/supabase-client";
+import { transformGraphData } from "@/integrations/common/transformGraphData";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
@@ -9,6 +11,7 @@ import QueryProcessor from "@/Components/analytics/QueryProcessor";
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [graphData, setGraphData] = useState<{ nodes: Person[], connections: Connection[] }>({ nodes: [], connections: [] });
   const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
   const [highlightedConnections, setHighlightedConnections] = useState<string[]>([]);
@@ -25,19 +28,20 @@ export default function ChatPage() {
   }, [messages]);
 
   const loadInitialData = async () => {
+    setIsLoading(true);
     try {
-      const [nodes, connections] = await Promise.all([
-        Person.list(),
-        Promise.resolve([]) // Temporarily disable loading connections from mock data
-      ]);
-      
-      setGraphData({ nodes, connections });
-      // Set a default user from the loaded data
-      if (nodes.length > 0) {
-        setCurrentUser(nodes[0]);
+      const raw = await supabaseClient.getGraphData();
+      if (raw) {
+        const transformed = transformGraphData(raw);
+        setGraphData(transformed);
+        if (transformed.nodes.length > 0) {
+          setCurrentUser(transformed.nodes[0]);
+        }
       }
     } catch (error) {
       console.error('Error loading graph data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
