@@ -2,17 +2,15 @@
 import { useState, useEffect, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
 import GraphCanvas from "../Components/graph/GraphCanvas";
-import { supabaseClient } from "@/integrations/supabase-client";
-import { transformSupabaseData } from "@/services/dataTransformer";
+import { getHybridGraphData } from "@/services/hybridDataService";
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
 import { Search, Filter, Users, Network as NetworkIcon } from "lucide-react";
 
 const connectionColors = {
-  work: '#FFC107',
-  education: '#F44336',
-  publication: '#2196F3'
+  WORK: '#FFC107',
+  STUDY: '#F44336'
 };
 
 export default function NetworkPage() {
@@ -34,18 +32,8 @@ export default function NetworkPage() {
   const loadGraphData = async () => {
     setIsLoading(true);
     try {
-      const [participants, connections, avatars] = await Promise.all([
-        supabaseClient.getAllParticipants(),
-        supabaseClient.getConnections(),
-        supabaseClient.getAvatars(),
-      ]);
-
-      const { nodes, connections: links } = transformSupabaseData(
-        participants || [],
-        connections || [],
-        avatars || []
-      );
-      setGraphData({ nodes, connections: links });
+      const { nodes, connections } = await getHybridGraphData();
+      setGraphData({ nodes, connections });
     } catch (error) {
       console.error('Error loading graph data:', error);
     } finally {
@@ -158,9 +146,8 @@ export default function NetworkPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Connections</SelectItem>
-              <SelectItem value="work">Work</SelectItem>
-              <SelectItem value="education">Education</SelectItem>
-              <SelectItem value="publication">Publications</SelectItem>
+              <SelectItem value="WORK">Work</SelectItem>
+              <SelectItem value="STUDY">Study</SelectItem>
             </SelectContent>
           </Select>
         </div>

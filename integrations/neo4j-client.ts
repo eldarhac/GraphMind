@@ -78,6 +78,26 @@ async function fetchAllData(): Promise<{ nodes: Person[], connections: Connectio
   }
 }
 
+async function getConnectionsFromNeo4j(): Promise<{ source: string; target: string; type: string; }[]> {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (p1:Participant)-[r:SHARED_EXPERIENCE]->(p2:Participant)
+       WHERE r.type IN ['WORK', 'STUDY']
+       RETURN p1.id AS source, p2.id AS target, r.type AS type`
+    );
+
+    return result.records.map(record => ({
+      source: record.get('source'),
+      target: record.get('target'),
+      type: record.get('type'),
+    }));
+  } finally {
+    await session.close();
+  }
+}
+
 export const neo4jClient = {
   fetchAllData,
-}; 
+  getConnectionsFromNeo4j,
+};

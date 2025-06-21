@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
-import { supabaseClient } from "@/integrations/supabase-client";
-import { transformSupabaseData } from "@/services/dataTransformer";
+import { getHybridGraphData } from "@/services/hybridDataService";
 import { motion, AnimatePresence } from "framer-motion";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
@@ -30,19 +29,9 @@ export default function ChatPage() {
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      const [participants, connections, avatars] = await Promise.all([
-        supabaseClient.getAllParticipants(),
-        supabaseClient.getConnections(),
-        supabaseClient.getAvatars(),
-      ]);
+      const { nodes, connections } = await getHybridGraphData();
 
-      const { nodes, connections: links } = transformSupabaseData(
-        participants || [],
-        connections || [],
-        avatars || []
-      );
-
-      setGraphData({ nodes, connections: links });
+      setGraphData({ nodes, connections });
       if (nodes.length > 0) {
         setCurrentUser(nodes[0]);
       }
