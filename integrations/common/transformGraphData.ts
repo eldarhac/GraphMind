@@ -39,7 +39,7 @@ export function transformGraphData(raw: RawGraphData): GraphData {
     expertise_areas: [],
     bio: p.bio || '',
     node_position: p.node_position || undefined,
-    avatar: avatarMap.get(p.id?.toString() || '') || null,
+    avatar: avatarMap.get(p.id?.toString() || '') || undefined,
   }));
 
   const connections: Connection[] = [];
@@ -73,8 +73,8 @@ export function transformGraphData(raw: RawGraphData): GraphData {
       });
     };
 
-    addConn(work, 'work');
-    addConn(school, 'education');
+    addConn(work, 'WORK');
+    addConn(school, 'STUDY');
     addConn(publication, 'publication');
   });
 

@@ -1,18 +1,25 @@
-import { useRef, useEffect, useState, type MouseEvent, type WheelEvent } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import ForceGraph2D, { NodeObject, LinkObject } from 'react-force-graph-2d';
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
-import { categorizeNodes, LayoutPerson, CORE_THRESHOLD } from '@/services/layoutUtils';
 
-const LABEL_VISIBILITY_ZOOM_THRESHOLD = 1.5;
-// Zoom level where the graph switches between macro and micro rendering
-const LOD_TRANSITION_ZOOM_THRESHOLD = 1.2;
+const CONNECTION_TYPE_COLOR: Record<string, string> = {
+  WORK: '#FFC107',
+  STUDY: '#F44336',
+};
 
-// Base visual constants used for zoom-relative scaling in the micro view
-const INITIAL_NODE_RADIUS = 12;
-const HIGHLIGHT_NODE_RADIUS = 14;
-const INITIAL_FONT_SIZE = 12;
-const CONNECTION_FONT_SIZE = 10;
+// Re-exporting for clarity in this component
+type GraphNode = NodeObject & Person & { 
+  isHighlighted?: boolean;
+  avatarImg?: HTMLImageElement;
+};
+
+type GraphLink = LinkObject & Connection & { 
+  isHighlighted?: boolean; 
+  source: string | number | GraphNode;
+  target: string | number | GraphNode;
+};
 
 interface GraphCanvasProps {
   nodes: Person[];
@@ -20,7 +27,6 @@ interface GraphCanvasProps {
   highlightedNodes?: string[];
   highlightedConnections?: string[];
   onNodeClick?: (nodeId: string) => void;
-  onGraphAction?: (action: any) => void;
 }
 
 export default function GraphCanvas({ 
@@ -29,382 +35,201 @@ export default function GraphCanvas({
   highlightedNodes = [], 
   highlightedConnections = [],
   onNodeClick,
-  onGraphAction 
 }: GraphCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const imageCache = useRef(new Map<string, HTMLImageElement>());
-  const brokenImageCache = useRef(new Set<string>());
-  const [imagesLoaded, setImagesLoaded] = useState(0);
+  const fgRef = useRef<any>();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [avatarImages, setAvatarImages] = useState<Record<string, HTMLImageElement>>({});
 
-  const connectionColors: { [key: string]: string } = {
-    WORK: '#FFC107',
-    STUDY: '#F44336',
-  };
-
-  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-  const starfield = useRef<{ x: number; y: number; size: number; alpha: number }[]>([]);
-
-  const [positionedNodes, setPositionedNodes] = useState<LayoutPerson[]>([]);
-
-  // Recalculate node layout whenever data or canvas size changes
   useEffect(() => {
-    const categorized = categorizeNodes(nodes, connections, CORE_THRESHOLD);
-    const coreNodes = categorized.filter(n => n.layoutType === 'core');
-    const satelliteNodes = categorized.filter(n => n.layoutType === 'satellite');
-
-    const centerX = canvasSize.width / 2;
-    const centerY = canvasSize.height / 2;
-    // Spread satellites based on available canvas size. Push them near the edges
-    // of the canvas to emphasize empty space between core and periphery.
-    const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45;
-
-    satelliteNodes.forEach((node, idx) => {
-      const angle = (2 * Math.PI / satelliteNodes.length) * idx;
-      node.node_position = {
-        x: centerX + radius * Math.cos(angle),
-        y: centerY + radius * Math.sin(angle)
-      };
+    const observer = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setSize({ width, height });
     });
 
-    coreNodes.forEach(node => {
-      node.node_position = node.node_position || {
-        // Keep the core tightly clustered in the middle
-        x: centerX + (Math.random() - 0.5) * 80,
-        y: centerY + (Math.random() - 0.5) * 80
-      };
-    });
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
 
-    setPositionedNodes([...coreNodes, ...satelliteNodes]);
-  }, [nodes, connections, canvasSize]);
-
-  // Observe canvas size changes
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const updateSize = () => {
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-      setCanvasSize({ width: rect.width, height: rect.height });
+    return () => {
+      observer.disconnect();
     };
-
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    canvas.parentElement && observer.observe(canvas.parentElement);
-    return () => observer.disconnect();
   }, []);
 
-  // Generate starfield whenever canvas size changes
   useEffect(() => {
-    const stars = [] as { x: number; y: number; size: number; alpha: number }[];
-    for (let i = 0; i < 150; i++) {
-      stars.push({
-        x: Math.random() * canvasSize.width,
-        y: Math.random() * canvasSize.height,
-        size: Math.random() * 1.5 + 0.5,
-        alpha: Math.random() * 0.5 + 0.2
-      });
-    }
-    starfield.current = stars;
-  }, [canvasSize]);
+    let isMounted = true;
+    setAvatarImages({}); // Clear previous images
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    let animationFrameId: number;
-    
-    const resizeCanvas = () => {
-      const parent = canvas.parentElement;
-      if (!parent) return;
-
-      const rect = parent.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      canvas.style.width = `${rect.width}px`;
-      canvas.style.height = `${rect.height}px`;
-      
-      ctx.scale(dpr, dpr);
-    };
-
-    const getImage = (url: string) => {
-      if (brokenImageCache.current.has(url)) return null;
-      if (imageCache.current.has(url)) return imageCache.current.get(url)!;
+    nodes.forEach(p => {
+      const avatarUrl = p.profile_picture_url || p.avatar;
+      if (!avatarUrl) return;
 
       const img = new Image();
-      img.src = url;
-      img.onload = () => setImagesLoaded(v => v + 1);
-      img.onerror = () => brokenImageCache.current.add(url);
-      imageCache.current.set(url, img);
-      return img;
-    };
-
-    const drawMacroView = () => {
-      connections.forEach(connection => {
-        const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
-        const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
-        if (nodeA && nodeB && nodeA.node_position && nodeB.node_position) {
-          const isHighlighted = highlightedConnections.includes(connection.id);
-          const connType = (connection as any).type || (connection as any).connection_type;
-          const color = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
-          ctx.strokeStyle = color;
-          ctx.lineWidth = isHighlighted ? 4 : 3;
-          ctx.globalAlpha = isHighlighted ? 1 : 0.8;
-          ctx.lineCap = 'round';
-
-          ctx.beginPath();
-          ctx.moveTo(nodeA.node_position.x, nodeA.node_position.y);
-          ctx.lineTo(nodeB.node_position.x, nodeB.node_position.y);
-          ctx.stroke();
+      img.onload = () => {
+        if (isMounted) {
+          setAvatarImages(prev => ({ ...prev, [p.id]: img }));
         }
-      });
-
-      positionedNodes.forEach(node => {
-        if (!node.node_position) return;
-        const { x, y } = node.node_position;
-        const isHighlighted = highlightedNodes.includes(node.id);
-        if (node.layoutType === 'satellite') {
-          const name = node.name || '';
-          const initials = name
-            .split(/\s+/)
-            .map(w => w[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-          ctx.fillStyle = '#F8FAFC';
-          const fontSize = isHighlighted ? 14 : 12;
-          ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(initials, x, y);
-        } else {
-          const radius = isHighlighted ? 5 : 3;
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI);
-          ctx.fillStyle = isHighlighted ? '#60A5FA' : '#FFFFFF';
-          ctx.fill();
-        }
-      });
-    };
-
-    const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) => {
-      return !(b.x > a.x + a.width || b.x + b.width < a.x || b.y > a.y + a.height || b.y + b.height < a.y);
-    };
-
-    const drawMicroView = (drawnLabelBounds: { x: number; y: number; width: number; height: number }[]) => {
-      const centerX = canvasSize.width / 2;
-      const centerY = canvasSize.height / 2;
-      const spreadFactor = Math.pow(zoom, 1.5);
-
-      connections.forEach(connection => {
-        const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
-        const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
-        if (nodeA && nodeB && nodeA.node_position && nodeB.node_position) {
-          const isHighlighted = highlightedConnections.includes(connection.id);
-          const x1 = centerX + (nodeA.node_position.x - centerX) * spreadFactor;
-          const y1 = centerY + (nodeA.node_position.y - centerY) * spreadFactor;
-          const x2 = centerX + (nodeB.node_position.x - centerX) * spreadFactor;
-          const y2 = centerY + (nodeB.node_position.y - centerY) * spreadFactor;
-
-          const midX = (x1 + x2) / 2;
-          const midY = (y1 + y2) / 2;
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          const curvature = Math.min(distance * 0.3, 80);
-          const perpX = -dy / distance * curvature;
-          const perpY = dx / distance * curvature;
-          const controlX = midX + perpX;
-          const controlY = midY + perpY;
-
-          const connType = (connection as any).type || (connection as any).connection_type;
-          const color = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
-          ctx.strokeStyle = color;
-          ctx.lineWidth = isHighlighted ? 3 : 1.5;
-          ctx.globalAlpha = isHighlighted ? 1 : 0.9;
-          ctx.lineCap = 'round';
-
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(controlX, controlY, x2, y2);
-          ctx.stroke();
-
-          if (isHighlighted && connType) {
-            ctx.fillStyle = '#F8FAFC';
-            ctx.font = `${CONNECTION_FONT_SIZE / zoom}px Inter, system-ui, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.fillText(connType.replace('_', ' '), controlX, controlY - 5);
-          }
-        }
-      });
-
-      positionedNodes.forEach(node => {
-        if (!node.node_position) return;
-        const baseX = centerX + (node.node_position.x - centerX) * spreadFactor;
-        const baseY = centerY + (node.node_position.y - centerY) * spreadFactor;
-        const isHighlighted = highlightedNodes.includes(node.id);
-        const radius = (isHighlighted ? HIGHLIGHT_NODE_RADIUS : INITIAL_NODE_RADIUS) / zoom;
-
-        const img = getImage(node.profile_picture_url || node.avatar || '');
-        // Fortified check to ensure image is fully loaded and valid
-        if (img && img.complete && img.naturalHeight > 0 && !brokenImageCache.current.has(img.src)) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(baseX, baseY, radius, 0, 2 * Math.PI);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(img, baseX - radius, baseY - radius, radius * 2, radius * 2);
-          ctx.restore();
-        } else {
-          ctx.beginPath();
-          ctx.arc(baseX, baseY, radius, 0, 2 * Math.PI);
-          ctx.fillStyle = '#334155';
-          ctx.fill();
-        }
-
-        const fontSize = INITIAL_FONT_SIZE / zoom;
-        ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
-        ctx.fillStyle = '#F8FAFC';
-        const metrics = ctx.measureText(node.name);
-        const box = { x: baseX + radius + 4, y: baseY - fontSize / 2, width: metrics.width, height: fontSize };
-        if (!drawnLabelBounds.some(b => overlaps(b, box))) {
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(node.name, baseX + radius + 4, baseY);
-          drawnLabelBounds.push(box);
-        }
-      });
-    };
-
-    const draw = () => {
-      resizeCanvas();
-
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
-
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(0, 0, rect.width, rect.height);
-
-      starfield.current.forEach(star => {
-        ctx.beginPath();
-        ctx.globalAlpha = star.alpha;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.arc(star.x, star.y, star.size, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-
-      ctx.save();
-      ctx.translate(offset.x, offset.y);
-      ctx.scale(zoom, zoom);
-
-      const drawnLabelBounds: { x: number; y: number; width: number; height: number }[] = [];
-
-      if (zoom < LOD_TRANSITION_ZOOM_THRESHOLD) {
-        drawMacroView();
-      } else {
-        drawMicroView(drawnLabelBounds);
-      }
-
-      ctx.restore();
-      animationFrameId = requestAnimationFrame(draw);
-    };
-    
-    draw();
-
-    const resizeObserver = new ResizeObserver(() => {
-        // No need to call draw here, it's called by the animation frame
+      };
+      // We don't handle onerror to avoid complexity, missing images will just not render
+      img.src = avatarUrl;
     });
-    if (canvas.parentElement) {
-      resizeObserver.observe(canvas.parentElement);
-    }
-    
-    return () => {
-      cancelAnimationFrame(animationFrameId);
-      resizeObserver.disconnect();
-    };
-  }, [positionedNodes, connections, highlightedNodes, highlightedConnections, zoom, offset, imagesLoaded]);
 
-  const handleMouseDown = (e: MouseEvent) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - offset.x) / zoom;
-    const y = (e.clientY - rect.top - offset.y) / zoom;
-    
-    // Check if clicking on a node
-    const clickedNode = positionedNodes.find(node => {
-      if (!node.node_position) return false;
-      const dx = x - node.node_position.x;
-      const dy = y - node.node_position.y;
-      return Math.sqrt(dx * dx + dy * dy) <= 15;
-    });
-    
-    if (clickedNode && onNodeClick) {
-      onNodeClick(clickedNode.id);
-      return;
-    }
-    
-    // Start dragging
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
-  };
+    return () => { isMounted = false; };
+  }, [nodes]);
 
-  const handleMouseMove = (e: MouseEvent) => {
-    if (isDragging) {
-      setOffset({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      });
-    }
-  };
+  const graphData = useMemo(() => {
+    const graphNodes: GraphNode[] = nodes.map(p => ({
+      ...p,
+      id: p.id,
+      isHighlighted: highlightedNodes.includes(p.id),
+      avatarImg: avatarImages[p.id],
+    }));
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+    // Filter out connections that reference non-existent nodes
+    const nodeIds = new Set(graphNodes.map(n => n.id));
+    const validConnections = connections.filter(conn => 
+      nodeIds.has(conn.person_a_id) && nodeIds.has(conn.person_b_id)
+    );
 
-  const handleWheel = (e: WheelEvent) => {
-    e.preventDefault();
-    const newZoom = Math.max(0.1, Math.min(3, zoom + (e.deltaY > 0 ? -0.1 : 0.1)));
-    setZoom(newZoom);
-  };
+    const graphLinks: GraphLink[] = validConnections.map(c => ({
+      ...c,
+      source: c.person_a_id,
+      target: c.person_b_id,
+      isHighlighted: highlightedConnections.includes(c.id),
+      type: c.connection_type, // Map connection_type to type for consistency
+    }));
 
+    return { nodes: graphNodes, links: graphLinks };
+  }, [nodes, connections, highlightedNodes, highlightedConnections, avatarImages]);
+  
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (fgRef.current) {
+      fgRef.current.d3Force('link')?.distance(100);
+      fgRef.current.d3Force('charge')?.strength(-150);
+    }
+  }, []);
 
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
+  const handleNodeClick = useCallback((node: NodeObject) => {
+    const graphNode = node as GraphNode;
+    if (onNodeClick) {
+      onNodeClick(graphNode.id);
+    }
+    // Center and zoom on node
+    if (fgRef.current && typeof graphNode.x === 'number' && typeof graphNode.y === 'number') {
+        fgRef.current.centerAt(graphNode.x, graphNode.y, 1000);
+        fgRef.current.zoom(2, 500);
+    }
+  }, [onNodeClick]);
+  
+  const nodeCanvasObject = useCallback((node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const graphNode = node as GraphNode;
+    const { x, y, name, isHighlighted, avatarImg } = graphNode;
+    const baseRadius = 5;
+    const radius = isHighlighted ? baseRadius * 1.5 : baseRadius;
+    const label = name || '';
 
-    return () => {
-      canvas.removeEventListener('wheel', handleWheel);
-    };
-  }, [zoom]);
+    // Draw Node Circle
+    ctx.beginPath();
+    ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
+    ctx.fillStyle = isHighlighted ? '#3B82F6' : '#334155';
+    ctx.fill();
+
+    // Draw avatar image
+    if (avatarImg && avatarImg.complete && avatarImg.naturalWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
+        ctx.clip();
+        ctx.drawImage(avatarImg, x! - radius, y! - radius, radius * 2, radius * 2);
+        ctx.restore();
+    } else {
+        // Fallback to initials if no image
+        const initials = name?.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '';
+        const fontSize = radius;
+        ctx.font = `${fontSize}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#F8FAFC';
+        ctx.fillText(initials, x!, y!);
+    }
+
+    // Draw label when zoomed in
+    if (globalScale > 1.5) {
+      const fontSize = 12 / globalScale;
+      ctx.font = `${fontSize}px Inter, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillText(label, x!, y! + radius + fontSize);
+    }
+  }, []);
+
+  const linkCanvasObject = useCallback((link: LinkObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const graphLink = link as GraphLink;
+    // Type guard to ensure we have node objects, not just IDs
+    const sourceNode = typeof graphLink.source === 'object' ? graphLink.source as unknown as GraphNode : null;
+    const targetNode = typeof graphLink.target === 'object' ? graphLink.target as unknown as GraphNode : null;
+
+    // Guard clause to ensure both nodes and their coordinates are valid
+    if (!sourceNode || !targetNode || sourceNode.x === undefined || sourceNode.y === undefined || targetNode.x === undefined || targetNode.y === undefined) {
+      return; // Skip drawing this link if data is not ready
+    }
+
+    const { x: sx, y: sy } = sourceNode;
+    const { x: tx, y: ty } = targetNode;
+    
+    // Only draw WORK and STUDY connections
+    if (graphLink.type !== 'WORK' && graphLink.type !== 'STUDY') {
+        return;
+    }
+    
+    const color = CONNECTION_TYPE_COLOR[graphLink.type];
+    const width = graphLink.isHighlighted ? 2.5 : 1;
+
+    // Arched path
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+    const offset = distance * 0.2;
+    const mx = (sx + tx) / 2;
+    const my = (sy + ty) / 2;
+    const nx = -dy / distance;
+    const ny = dx / distance;
+    const cpx = mx + nx * offset;
+    const cpy = my + ny * offset;
+
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(cpx, cpy, tx, ty);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width / globalScale;
+    ctx.globalAlpha = graphLink.isHighlighted ? 1 : 0.6;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }, []);
 
   const resetView = () => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
+    if (fgRef.current) {
+        fgRef.current.zoomToFit(400, 100);
+    }
   };
 
   return (
-    <div className="relative w-full h-full bg-slate-950 rounded-2xl border border-slate-700/50 overflow-hidden">
-      {/* Canvas */}
-      <canvas
-        ref={canvasRef}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+    <div ref={containerRef} className="relative w-full h-full bg-slate-950 rounded-2xl border border-slate-700/50 overflow-hidden">
+      <ForceGraph2D
+        ref={fgRef}
+        width={size.width}
+        height={size.height}
+        graphData={graphData}
+        backgroundColor="#0F172A"
+        nodeCanvasObject={nodeCanvasObject}
+        linkCanvasObject={linkCanvasObject}
+        linkCanvasObjectMode={() => "replace"}
+        onNodeClick={handleNodeClick}
+        cooldownTicks={100}
+        onEngineStop={() => fgRef.current?.zoomToFit(400, 50)}
+        enableZoomInteraction
+        enablePanInteraction
       />
 
       {/* Controls */}
@@ -412,7 +237,7 @@ export default function GraphCanvas({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setZoom(Math.min(3, zoom + 0.2))}
+          onClick={() => fgRef.current?.zoom(fgRef.current.zoom() + 0.2, 500)}
           className="w-10 h-10 rounded-xl bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 text-slate-300 hover:text-white"
         >
           <ZoomIn className="w-4 h-4" />
@@ -420,7 +245,7 @@ export default function GraphCanvas({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setZoom(Math.max(0.1, zoom - 0.2))}
+          onClick={() => fgRef.current?.zoom(fgRef.current.zoom() - 0.2, 500)}
           className="w-10 h-10 rounded-xl bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 text-slate-300 hover:text-white"
         >
           <ZoomOut className="w-4 h-4" />
@@ -438,13 +263,13 @@ export default function GraphCanvas({
       {/* Graph Stats */}
       <div className="absolute bottom-4 left-4 bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 px-4 py-2">
         <div className="text-sm text-slate-300">
-          <span className="text-blue-400 font-medium">{positionedNodes.length}</span> nodes • 
+          <span className="text-blue-400 font-medium">{nodes.length}</span> nodes • 
           <span className="text-indigo-400 font-medium ml-1">{connections.length}</span> connections
         </div>
       </div>
 
       {/* Loading State */}
-      {positionedNodes.length === 0 && (
+      {nodes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
             <div className="w-12 h-12 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
