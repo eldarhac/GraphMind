@@ -8,6 +8,12 @@ const LABEL_VISIBILITY_ZOOM_THRESHOLD = 1.5;
 // Zoom level where the graph switches between macro and micro rendering
 const LOD_TRANSITION_ZOOM_THRESHOLD = 1.2;
 
+// Base visual constants used for zoom-relative scaling in the micro view
+const INITIAL_NODE_RADIUS = 12;
+const HIGHLIGHT_NODE_RADIUS = 14;
+const INITIAL_FONT_SIZE = 12;
+const CONNECTION_FONT_SIZE = 10;
+
 interface GraphCanvasProps {
   nodes: Person[];
   connections: Connection[];
@@ -196,15 +202,19 @@ export default function GraphCanvas({
     };
 
     const drawMicroView = (drawnLabelBounds: { x: number; y: number; width: number; height: number }[]) => {
+      const centerX = canvasSize.width / 2;
+      const centerY = canvasSize.height / 2;
+      const spreadFactor = Math.pow(zoom, 1.5);
+
       connections.forEach(connection => {
         const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
         const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
         if (nodeA && nodeB && nodeA.node_position && nodeB.node_position) {
           const isHighlighted = highlightedConnections.includes(connection.id);
-          const x1 = nodeA.node_position.x;
-          const y1 = nodeA.node_position.y;
-          const x2 = nodeB.node_position.x;
-          const y2 = nodeB.node_position.y;
+          const x1 = centerX + (nodeA.node_position.x - centerX) * spreadFactor;
+          const y1 = centerY + (nodeA.node_position.y - centerY) * spreadFactor;
+          const x2 = centerX + (nodeB.node_position.x - centerX) * spreadFactor;
+          const y2 = centerY + (nodeB.node_position.y - centerY) * spreadFactor;
 
           const midX = (x1 + x2) / 2;
           const midY = (y1 + y2) / 2;
@@ -231,7 +241,7 @@ export default function GraphCanvas({
 
           if (isHighlighted && connType) {
             ctx.fillStyle = '#F8FAFC';
-            ctx.font = '10px Inter, system-ui, sans-serif';
+            ctx.font = `${CONNECTION_FONT_SIZE / zoom}px Inter, system-ui, sans-serif`;
             ctx.textAlign = 'center';
             ctx.fillText(connType.replace('_', ' '), controlX, controlY - 5);
           }
@@ -240,36 +250,37 @@ export default function GraphCanvas({
 
       positionedNodes.forEach(node => {
         if (!node.node_position) return;
-        const { x, y } = node.node_position;
+        const baseX = centerX + (node.node_position.x - centerX) * spreadFactor;
+        const baseY = centerY + (node.node_position.y - centerY) * spreadFactor;
         const isHighlighted = highlightedNodes.includes(node.id);
-        const radius = isHighlighted ? 14 : 12;
+        const radius = (isHighlighted ? HIGHLIGHT_NODE_RADIUS : INITIAL_NODE_RADIUS) / zoom;
 
         const img = getImage(node.profile_picture_url || node.avatar || '');
         // Fortified check to ensure image is fully loaded and valid
         if (img && img.complete && img.naturalHeight > 0 && !brokenImageCache.current.has(img.src)) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.arc(baseX, baseY, radius, 0, 2 * Math.PI);
           ctx.closePath();
           ctx.clip();
-          ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+          ctx.drawImage(img, baseX - radius, baseY - radius, radius * 2, radius * 2);
           ctx.restore();
         } else {
           ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.arc(baseX, baseY, radius, 0, 2 * Math.PI);
           ctx.fillStyle = '#334155';
           ctx.fill();
         }
 
-        const fontSize = 12;
+        const fontSize = INITIAL_FONT_SIZE / zoom;
         ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
         ctx.fillStyle = '#F8FAFC';
         const metrics = ctx.measureText(node.name);
-        const box = { x: x + radius + 4, y: y - fontSize / 2, width: metrics.width, height: fontSize };
+        const box = { x: baseX + radius + 4, y: baseY - fontSize / 2, width: metrics.width, height: fontSize };
         if (!drawnLabelBounds.some(b => overlaps(b, box))) {
           ctx.textAlign = 'left';
           ctx.textBaseline = 'middle';
-          ctx.fillText(node.name, x + radius + 4, y);
+          ctx.fillText(node.name, baseX + radius + 4, baseY);
           drawnLabelBounds.push(box);
         }
       });
