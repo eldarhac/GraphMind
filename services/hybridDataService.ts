@@ -10,7 +10,17 @@ export async function getHybridGraphData(): Promise<{ nodes: Person[]; connectio
     neo4jClient.getConnectionsFromNeo4j(),
   ]);
 
-  const { nodes } = transformSupabaseData(participants || [], [], avatars || []);
+  const LINKEDIN_PLACEHOLDER = 'https://static.licdn.com/aero-v1/sc/h/9c8pery4and6j6ohjkp54ma2';
+
+  const cleanedAvatars = (avatars || []).map((a: any) => {
+    const url = a.avatar_url || a.avatar;
+    if (url === LINKEDIN_PLACEHOLDER) {
+      return { ...a, avatar: null, avatar_url: null };
+    }
+    return a;
+  });
+
+  const { nodes } = transformSupabaseData(participants || [], [], cleanedAvatars);
 
   const connections: Connection[] = neo4jConnections.map((c) => ({
     id: `${c.source}-${c.target}-${c.type}`,

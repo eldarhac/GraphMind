@@ -245,7 +245,8 @@ export default function GraphCanvas({
         const radius = isHighlighted ? 14 : 12;
 
         const img = getImage(node.profile_picture_url || node.avatar || '');
-        if (img && img.complete && !brokenImageCache.current.has(img.src)) {
+        // Fortified check to ensure image is fully loaded and valid
+        if (img && img.complete && img.naturalHeight > 0 && !brokenImageCache.current.has(img.src)) {
           ctx.save();
           ctx.beginPath();
           ctx.arc(x, y, radius, 0, 2 * Math.PI);
