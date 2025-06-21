@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, type MouseEvent, type WheelEvent } from 'r
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
+import { categorizeNodes, LayoutPerson, CORE_THRESHOLD } from '@/services/layoutUtils';
 
 interface GraphCanvasProps {
   nodes: Person[];
@@ -35,22 +36,70 @@ export default function GraphCanvas({
     publication: '#2196F3'
   };
 
-  // Generate random positions for nodes if they don't have positions
-  const generateNodePositions = (nodesToPosition: Person[]): Person[] => {
-    return nodesToPosition.map((node: Person) => ({
-      ...node,
-      node_position: node.node_position || {
-        x: Math.random() * 600 + 100,
-        y: Math.random() * 400 + 100
-      }
-    }));
-  };
+  const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+  const starfield = useRef<{ x: number; y: number; size: number; alpha: number }[]>([]);
 
-  const [positionedNodes, setPositionedNodes] = useState<Person[]>([]);
+  const [positionedNodes, setPositionedNodes] = useState<LayoutPerson[]>([]);
 
+  // Recalculate node layout whenever data or canvas size changes
   useEffect(() => {
-    setPositionedNodes(generateNodePositions(nodes));
-  }, [nodes]);
+    const categorized = categorizeNodes(nodes, connections, CORE_THRESHOLD);
+    const coreNodes = categorized.filter(n => n.layoutType === 'core');
+    const satelliteNodes = categorized.filter(n => n.layoutType === 'satellite');
+
+    const centerX = canvasSize.width / 2;
+    const centerY = canvasSize.height / 2;
+    const radius = Math.min(centerX, centerY) - 80;
+
+    satelliteNodes.forEach((node, idx) => {
+      const angle = (2 * Math.PI / satelliteNodes.length) * idx;
+      node.node_position = {
+        x: centerX + radius * Math.cos(angle),
+        y: centerY + radius * Math.sin(angle)
+      };
+    });
+
+    coreNodes.forEach(node => {
+      node.node_position = node.node_position || {
+        x: centerX + (Math.random() - 0.5) * 120,
+        y: centerY + (Math.random() - 0.5) * 120
+      };
+    });
+
+    setPositionedNodes([...coreNodes, ...satelliteNodes]);
+  }, [nodes, connections, canvasSize]);
+
+  // Observe canvas size changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const updateSize = () => {
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+      setCanvasSize({ width: rect.width, height: rect.height });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    canvas.parentElement && observer.observe(canvas.parentElement);
+    return () => observer.disconnect();
+  }, []);
+
+  // Generate starfield whenever canvas size changes
+  useEffect(() => {
+    const stars = [] as { x: number; y: number; size: number; alpha: number }[];
+    for (let i = 0; i < 150; i++) {
+      stars.push({
+        x: Math.random() * canvasSize.width,
+        y: Math.random() * canvasSize.height,
+        size: Math.random() * 1.5 + 0.5,
+        alpha: Math.random() * 0.5 + 0.2
+      });
+    }
+    starfield.current = stars;
+  }, [canvasSize]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -86,6 +135,16 @@ export default function GraphCanvas({
       // Clear canvas with a background color
       ctx.fillStyle = '#0F172A'; // slate-900
       ctx.fillRect(0, 0, rect.width, rect.height);
+
+      // Starfield background
+      starfield.current.forEach(star => {
+        ctx.beginPath();
+        ctx.globalAlpha = star.alpha;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.arc(star.x, star.y, star.size, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
       
       // Apply transformations
       ctx.save();
@@ -151,7 +210,20 @@ export default function GraphCanvas({
 
         const { x, y } = node.node_position;
         const isHighlighted = highlightedNodes.includes(node.id);
-        const radius = isHighlighted ? 15 : 12;
+
+        // Satellites are drawn as initials only
+        if (node.layoutType === 'satellite') {
+          const initials = node.name
+            ? node.name.split(' ').map(p => p.charAt(0)).join('').slice(0, 2).toUpperCase()
+            : '?';
+          ctx.fillStyle = '#F8FAFC';
+          ctx.font = `${Math.min(12, 12 * zoom)}px Inter, system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillText(initials, x, y + 4);
+          return;
+        }
+
+        const radius = isHighlighted ? 12 : 10;
         const hasAvatar = node.avatar && !brokenImageCache.current.has(node.avatar);
 
         // Node shadow
@@ -164,46 +236,46 @@ export default function GraphCanvas({
         ctx.globalAlpha = 1;
 
         const drawFallback = () => {
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-            if (isHighlighted) {
-                gradient.addColorStop(0, '#60A5FA');
-                gradient.addColorStop(1, '#1E40AF');
-            } else {
-                gradient.addColorStop(0, '#64748B');
-                gradient.addColorStop(1, '#334155');
-            }
-            ctx.fillStyle = gradient;
-            ctx.fill();
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+          if (isHighlighted) {
+            gradient.addColorStop(0, '#60A5FA');
+            gradient.addColorStop(1, '#1E40AF');
+          } else {
+            gradient.addColorStop(0, '#64748B');
+            gradient.addColorStop(1, '#334155');
+          }
+          ctx.fillStyle = gradient;
+          ctx.fill();
         };
 
         if (hasAvatar) {
-            const img = imageCache.current.get(node.avatar!);
-            if (img) {
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(x, y, radius, 0, 2 * Math.PI);
-                ctx.clip();
-                ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
-                ctx.restore();
-            } else {
-                drawFallback();
-                const newImg = new Image();
-                newImg.crossOrigin = 'Anonymous';
-                newImg.onload = () => {
-                    imageCache.current.set(node.avatar!, newImg);
-                    setImagesLoaded(prev => prev + 1);
-                };
-                newImg.onerror = () => {
-                    console.warn(`Failed to load image (CORS or broken link): ${node.avatar}`);
-                    brokenImageCache.current.add(node.avatar!);
-                    setImagesLoaded(prev => prev + 1);
-                };
-                newImg.src = node.avatar!;
-            }
-        } else {
+          const img = imageCache.current.get(node.avatar!);
+          if (img) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            ctx.clip();
+            ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+            ctx.restore();
+          } else {
             drawFallback();
+            const newImg = new Image();
+            newImg.crossOrigin = 'Anonymous';
+            newImg.onload = () => {
+              imageCache.current.set(node.avatar!, newImg);
+              setImagesLoaded(prev => prev + 1);
+            };
+            newImg.onerror = () => {
+              console.warn(`Failed to load image (CORS or broken link): ${node.avatar}`);
+              brokenImageCache.current.add(node.avatar!);
+              setImagesLoaded(prev => prev + 1);
+            };
+            newImg.src = node.avatar!;
+          }
+        } else {
+          drawFallback();
         }
 
         // Node border
