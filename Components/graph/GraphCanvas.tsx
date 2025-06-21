@@ -5,6 +5,8 @@ import { Person, Connection } from '@/Entities/all';
 import { categorizeNodes, LayoutPerson, CORE_THRESHOLD } from '@/services/layoutUtils';
 
 const LABEL_VISIBILITY_ZOOM_THRESHOLD = 1.5;
+// Zoom level where the graph switches between macro and micro rendering
+const LOD_TRANSITION_ZOOM_THRESHOLD = 1.2;
 
 interface GraphCanvasProps {
   nodes: Person[];
@@ -129,116 +131,43 @@ export default function GraphCanvas({
       ctx.scale(dpr, dpr);
     };
 
-    const draw = () => {
-      resizeCanvas();
-      
-      const parent = canvas.parentElement;
-      if (!parent) return;
-      const rect = parent.getBoundingClientRect();
+    const getImage = (url: string) => {
+      if (brokenImageCache.current.has(url)) return null;
+      if (imageCache.current.has(url)) return imageCache.current.get(url)!;
 
-      // Clear canvas with a background color
-      ctx.fillStyle = '#0F172A'; // slate-900
-      ctx.fillRect(0, 0, rect.width, rect.height);
+      const img = new Image();
+      img.src = url;
+      img.onload = () => setImagesLoaded(v => v + 1);
+      img.onerror = () => brokenImageCache.current.add(url);
+      imageCache.current.set(url, img);
+      return img;
+    };
 
-      // Starfield background
-      starfield.current.forEach(star => {
-        ctx.beginPath();
-        ctx.globalAlpha = star.alpha;
-        ctx.fillStyle = '#FFFFFF';
-        ctx.arc(star.x, star.y, star.size, 0, 2 * Math.PI);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-      
-      // Apply transformations
-      ctx.save();
-      ctx.translate(offset.x, offset.y);
-      ctx.scale(zoom, zoom);
-
-      // Track label bounds to avoid overlapping labels
-      const drawnLabelBounds: { x: number; y: number; width: number; height: number }[] = [];
-
-      // Draw connections first (so they appear behind nodes)
+    const drawMacroView = () => {
       connections.forEach(connection => {
         const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
         const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
-        
         if (nodeA && nodeB && nodeA.node_position && nodeB.node_position) {
           const isHighlighted = highlightedConnections.includes(connection.id);
-          
-          const x1 = nodeA.node_position.x;
-          const y1 = nodeA.node_position.y;
-          const x2 = nodeB.node_position.x;
-          const y2 = nodeB.node_position.y;
-          
-          // Calculate curve control point
-          const midX = (x1 + x2) / 2;
-          const midY = (y1 + y2) / 2;
-          const dx = x2 - x1;
-          const dy = y2 - y1;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          
-          // Create perpendicular offset for curve
-          const curvature = Math.min(distance * 0.3, 80);
-          const perpX = -dy / distance * curvature;
-          const perpY = dx / distance * curvature;
-          
-          const controlX = midX + perpX;
-          const controlY = midY + perpY;
-
-          // Draw only short "wispy" segments from each node along the curve
-          const t = 0.15; // percentage of the curve length to draw
-          const quadPoint = (tVal: number) => {
-            const inv = 1 - tVal;
-            return {
-              x: inv * inv * x1 + 2 * inv * tVal * controlX + tVal * tVal * x2,
-              y: inv * inv * y1 + 2 * inv * tVal * controlY + tVal * tVal * y2,
-            };
-          };
-
-          const startPointA = quadPoint(t);
-          const startPointB = quadPoint(1 - t);
-
           const connType = (connection as any).type || (connection as any).connection_type;
           const color = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
           ctx.strokeStyle = color;
-          ctx.lineWidth = isHighlighted ? 4 : 2;
+          ctx.lineWidth = isHighlighted ? 4 : 3;
           ctx.globalAlpha = isHighlighted ? 1 : 0.8;
           ctx.lineCap = 'round';
 
           ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(controlX, controlY, startPointA.x, startPointA.y);
+          ctx.moveTo(nodeA.node_position.x, nodeA.node_position.y);
+          ctx.lineTo(nodeB.node_position.x, nodeB.node_position.y);
           ctx.stroke();
-
-          ctx.beginPath();
-          ctx.moveTo(x2, y2);
-          ctx.quadraticCurveTo(controlX, controlY, startPointB.x, startPointB.y);
-          ctx.stroke();
-          
-          // Draw connection label on hover/highlight
-          if (isHighlighted && connType) {
-            ctx.fillStyle = '#F8FAFC';
-            ctx.font = '10px Inter, system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(
-              connType.replace('_', ' '),
-              controlX,
-              controlY - 5
-            );
-          }
         }
       });
 
-      // Draw nodes on top of connections
       positionedNodes.forEach(node => {
         if (!node.node_position) return;
-
         const { x, y } = node.node_position;
         const isHighlighted = highlightedNodes.includes(node.id);
-
         if (node.layoutType === 'satellite') {
-          // Draw initials for satellites
           const name = node.name || '';
           const initials = name
             .split(/\s+/)
@@ -253,7 +182,6 @@ export default function GraphCanvas({
           ctx.textBaseline = 'middle';
           ctx.fillText(initials, x, y);
         } else {
-          // Core nodes as small points of light
           const radius = isHighlighted ? 5 : 3;
           ctx.beginPath();
           ctx.arc(x, y, radius, 0, 2 * Math.PI);
@@ -261,6 +189,121 @@ export default function GraphCanvas({
           ctx.fill();
         }
       });
+    };
+
+    const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) => {
+      return !(b.x > a.x + a.width || b.x + b.width < a.x || b.y > a.y + a.height || b.y + b.height < a.y);
+    };
+
+    const drawMicroView = () => {
+      connections.forEach(connection => {
+        const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
+        const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
+        if (nodeA && nodeB && nodeA.node_position && nodeB.node_position) {
+          const isHighlighted = highlightedConnections.includes(connection.id);
+          const x1 = nodeA.node_position.x;
+          const y1 = nodeA.node_position.y;
+          const x2 = nodeB.node_position.x;
+          const y2 = nodeB.node_position.y;
+
+          const midX = (x1 + x2) / 2;
+          const midY = (y1 + y2) / 2;
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const curvature = Math.min(distance * 0.3, 80);
+          const perpX = -dy / distance * curvature;
+          const perpY = dx / distance * curvature;
+          const controlX = midX + perpX;
+          const controlY = midY + perpY;
+
+          const connType = (connection as any).type || (connection as any).connection_type;
+          const color = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
+          ctx.strokeStyle = color;
+          ctx.lineWidth = isHighlighted ? 3 : 1.5;
+          ctx.globalAlpha = isHighlighted ? 1 : 0.9;
+          ctx.lineCap = 'round';
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo(controlX, controlY, x2, y2);
+          ctx.stroke();
+
+          if (isHighlighted && connType) {
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = '10px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(connType.replace('_', ' '), controlX, controlY - 5);
+          }
+        }
+      });
+
+      positionedNodes.forEach(node => {
+        if (!node.node_position) return;
+        const { x, y } = node.node_position;
+        const isHighlighted = highlightedNodes.includes(node.id);
+        const radius = isHighlighted ? 14 : 12;
+
+        const img = getImage(node.profile_picture_url || node.avatar || '');
+        if (img && img.complete && !brokenImageCache.current.has(img.src)) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = '#334155';
+          ctx.fill();
+        }
+
+        const fontSize = 12;
+        ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+        ctx.fillStyle = '#F8FAFC';
+        const metrics = ctx.measureText(node.name);
+        const box = { x: x + radius + 4, y: y - fontSize / 2, width: metrics.width, height: fontSize };
+        if (!drawnLabelBounds.some(b => overlaps(b, box))) {
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(node.name, x + radius + 4, y);
+          drawnLabelBounds.push(box);
+        }
+      });
+    };
+
+    const draw = () => {
+      resizeCanvas();
+
+      const parent = canvas.parentElement;
+      if (!parent) return;
+      const rect = parent.getBoundingClientRect();
+
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, rect.width, rect.height);
+
+      starfield.current.forEach(star => {
+        ctx.beginPath();
+        ctx.globalAlpha = star.alpha;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.arc(star.x, star.y, star.size, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+
+      ctx.save();
+      ctx.translate(offset.x, offset.y);
+      ctx.scale(zoom, zoom);
+
+      const drawnLabelBounds: { x: number; y: number; width: number; height: number }[] = [];
+
+      if (zoom < LOD_TRANSITION_ZOOM_THRESHOLD) {
+        drawMacroView();
+      } else {
+        drawMicroView();
+      }
 
       ctx.restore();
       animationFrameId = requestAnimationFrame(draw);
