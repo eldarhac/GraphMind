@@ -195,7 +195,7 @@ export default function GraphCanvas({
       return !(b.x > a.x + a.width || b.x + b.width < a.x || b.y > a.y + a.height || b.y + b.height < a.y);
     };
 
-    const drawMicroView = () => {
+    const drawMicroView = (drawnLabelBounds: { x: number; y: number; width: number; height: number }[]) => {
       connections.forEach(connection => {
         const nodeA = positionedNodes.find(n => n.id === connection.person_a_id);
         const nodeB = positionedNodes.find(n => n.id === connection.person_b_id);
@@ -302,7 +302,7 @@ export default function GraphCanvas({
       if (zoom < LOD_TRANSITION_ZOOM_THRESHOLD) {
         drawMacroView();
       } else {
-        drawMicroView();
+        drawMicroView(drawnLabelBounds);
       }
 
       ctx.restore();
