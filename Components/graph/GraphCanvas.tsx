@@ -50,7 +50,8 @@ export default function GraphCanvas({
 
     const centerX = canvasSize.width / 2;
     const centerY = canvasSize.height / 2;
-    const radius = Math.min(centerX, centerY) - 80;
+    // Spread satellites based on available canvas size
+    const radius = Math.min(centerX, centerY) * 0.9;
 
     satelliteNodes.forEach((node, idx) => {
       const angle = (2 * Math.PI / satelliteNodes.length) * idx;
@@ -151,6 +152,9 @@ export default function GraphCanvas({
       ctx.save();
       ctx.translate(offset.x, offset.y);
       ctx.scale(zoom, zoom);
+
+      // Track label bounds to avoid overlapping labels
+      const drawnLabelBounds: { x: number; y: number; width: number; height: number }[] = [];
 
       // Draw connections first (so they appear behind nodes)
       connections.forEach(connection => {
@@ -278,7 +282,7 @@ export default function GraphCanvas({
         // Node label with background when zoomed in
         if (zoom >= LABEL_VISIBILITY_ZOOM_THRESHOLD) {
           const label = node.name || 'Unknown';
-          const fontSize = Math.min(12, 12 * zoom);
+          const fontSize = Math.min(10, 10 * zoom);
           ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'top';
@@ -287,11 +291,21 @@ export default function GraphCanvas({
           const bgX = x - textWidth / 2 - padding;
           const bgY = y + radius + 4;
           const bgHeight = fontSize + padding * 2;
-          ctx.fillStyle = 'rgba(15,23,42,0.7)';
-          ctx.fillRect(bgX, bgY, textWidth + padding * 2, bgHeight);
-          ctx.fillStyle = '#F8FAFC';
-          ctx.fillText(label, x, bgY + padding);
-          ctx.textBaseline = 'alphabetic';
+          const bounds = { x: bgX, y: bgY, width: textWidth + padding * 2, height: bgHeight };
+          const intersects = drawnLabelBounds.some(b =>
+            bounds.x < b.x + b.width &&
+            bounds.x + bounds.width > b.x &&
+            bounds.y < b.y + b.height &&
+            bounds.y + bounds.height > b.y
+          );
+          if (!intersects) {
+            ctx.fillStyle = 'rgba(15,23,42,0.7)';
+            ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+            ctx.fillStyle = '#F8FAFC';
+            ctx.fillText(label, x, bgY + padding);
+            ctx.textBaseline = 'alphabetic';
+            drawnLabelBounds.push(bounds);
+          }
         }
       });
 
