@@ -4,6 +4,8 @@ import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
 import { categorizeNodes, LayoutPerson, CORE_THRESHOLD } from '@/services/layoutUtils';
 
+const LABEL_VISIBILITY_ZOOM_THRESHOLD = 1.5;
+
 interface GraphCanvasProps {
   nodes: Person[];
   connections: Connection[];
@@ -211,18 +213,6 @@ export default function GraphCanvas({
         const { x, y } = node.node_position;
         const isHighlighted = highlightedNodes.includes(node.id);
 
-        // Satellites are drawn as initials only
-        if (node.layoutType === 'satellite') {
-          const initials = node.name
-            ? node.name.split(' ').map(p => p.charAt(0)).join('').slice(0, 2).toUpperCase()
-            : '?';
-          ctx.fillStyle = '#F8FAFC';
-          ctx.font = `${Math.min(12, 12 * zoom)}px Inter, system-ui, sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.fillText(initials, x, y + 4);
-          return;
-        }
-
         const radius = isHighlighted ? 12 : 10;
         const hasAvatar = node.avatar && !brokenImageCache.current.has(node.avatar);
 
@@ -285,12 +275,23 @@ export default function GraphCanvas({
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Node label
-        if (zoom > 0.6) {
-          ctx.fillStyle = '#F8FAFC';
-          ctx.font = `${Math.min(12, 12 * zoom)}px Inter, system-ui, sans-serif`;
+        // Node label with background when zoomed in
+        if (zoom >= LABEL_VISIBILITY_ZOOM_THRESHOLD) {
+          const label = node.name || 'Unknown';
+          const fontSize = Math.min(12, 12 * zoom);
+          ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.fillText(node.name || 'Unknown', x, y + radius + 20);
+          ctx.textBaseline = 'top';
+          const padding = 2;
+          const textWidth = ctx.measureText(label).width;
+          const bgX = x - textWidth / 2 - padding;
+          const bgY = y + radius + 4;
+          const bgHeight = fontSize + padding * 2;
+          ctx.fillStyle = 'rgba(15,23,42,0.7)';
+          ctx.fillRect(bgX, bgY, textWidth + padding * 2, bgHeight);
+          ctx.fillStyle = '#F8FAFC';
+          ctx.fillText(label, x, bgY + padding);
+          ctx.textBaseline = 'alphabetic';
         }
       });
 
