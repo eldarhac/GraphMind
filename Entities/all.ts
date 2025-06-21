@@ -17,6 +17,13 @@ export interface Person {
   bio?: string;
   influence_score?: number;
   node_position?: { x: number; y: number; };
+  /**
+   * Layout type for hybrid graph rendering. Nodes with many connections
+   * are marked as 'core' while others are 'satellite'.
+   */
+  layoutType?: 'core' | 'satellite';
+  /** Number of connections used when categorizing layout type */
+  degree?: number;
 }
 
 export interface Connection {
