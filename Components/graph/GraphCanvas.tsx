@@ -33,9 +33,8 @@ export default function GraphCanvas({
   const [imagesLoaded, setImagesLoaded] = useState(0);
 
   const connectionColors: { [key: string]: string } = {
-    work: '#FFC107',
-    education: '#F44336',
-    publication: '#2196F3'
+    WORK: '#FFC107',
+    STUDY: '#F44336',
   };
 
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -186,20 +185,21 @@ export default function GraphCanvas({
           ctx.moveTo(x1, y1);
           ctx.quadraticCurveTo(controlX, controlY, x2, y2);
           
-          ctx.strokeStyle = isHighlighted ? '#3B82F6' : (connectionColors[connection.connection_type] || '#475569');
+          const connType = (connection as any).type || (connection as any).connection_type;
+          ctx.strokeStyle = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
           ctx.lineWidth = isHighlighted ? 4 : 2;
           ctx.globalAlpha = isHighlighted ? 1 : 0.8;
           ctx.lineCap = 'round';
           ctx.stroke();
           
           // Draw connection label on hover/highlight
-          if (isHighlighted && connection.connection_type) {
+          if (isHighlighted && connType) {
             ctx.fillStyle = '#F8FAFC';
             ctx.font = '10px Inter, system-ui, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(
-              connection.connection_type.replace('_', ' '), 
-              controlX, 
+              connType.replace('_', ' '),
+              controlX,
               controlY - 5
             );
           }
