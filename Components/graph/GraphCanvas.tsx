@@ -1,6 +1,5 @@
 import { useRef, useEffect, useState, type MouseEvent, type WheelEvent } from 'react';
-import { motion } from 'framer-motion';
-import { ZoomIn, ZoomOut, Maximize, Filter } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
 
@@ -26,7 +25,9 @@ export default function GraphCanvas({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map()).current;
+  const imageCache = useRef(new Map<string, HTMLImageElement>());
+  const brokenImageCache = useRef(new Set<string>());
+  const [imagesLoaded, setImagesLoaded] = useState(0);
 
   const connectionColors: { [key: string]: string } = {
     work: '#FFC107',
@@ -147,11 +148,11 @@ export default function GraphCanvas({
       // Draw nodes on top of connections
       positionedNodes.forEach(node => {
         if (!node.node_position) return;
-        
-        const x = node.node_position.x;
-        const y = node.node_position.y;
+
+        const { x, y } = node.node_position;
         const isHighlighted = highlightedNodes.includes(node.id);
         const radius = isHighlighted ? 15 : 12;
+        const hasAvatar = node.avatar && !brokenImageCache.current.has(node.avatar);
 
         // Node shadow
         ctx.globalAlpha = 0.3;
@@ -160,38 +161,49 @@ export default function GraphCanvas({
         ctx.fillStyle = '#000000';
         ctx.fill();
 
-        // Node background
         ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, 2 * Math.PI);
-        
-        // Gradient fill for nodes
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        if (isHighlighted) {
-          gradient.addColorStop(0, '#60A5FA');
-          gradient.addColorStop(1, '#1E40AF');
-        } else {
-          gradient.addColorStop(0, '#64748B');
-          gradient.addColorStop(1, '#334155');
-        }
-        ctx.fillStyle = gradient;
-        ctx.fill();
 
-        if (node.avatar) {
-          let img = imageCache.get(node.avatar);
-          if (!img) {
-            img = new Image();
-            img.src = node.avatar;
-            imageCache.set(node.avatar, img);
-          }
-          if (img.complete) {
-            ctx.save();
+        const drawFallback = () => {
             ctx.beginPath();
-            ctx.arc(x, y, radius - 1, 0, 2 * Math.PI);
-            ctx.clip();
-            ctx.drawImage(img, x - radius + 1, y - radius + 1, (radius - 1) * 2, (radius - 1) * 2);
-            ctx.restore();
-          }
+            ctx.arc(x, y, radius, 0, 2 * Math.PI);
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+            if (isHighlighted) {
+                gradient.addColorStop(0, '#60A5FA');
+                gradient.addColorStop(1, '#1E40AF');
+            } else {
+                gradient.addColorStop(0, '#64748B');
+                gradient.addColorStop(1, '#334155');
+            }
+            ctx.fillStyle = gradient;
+            ctx.fill();
+        };
+
+        if (hasAvatar) {
+            const img = imageCache.current.get(node.avatar!);
+            if (img) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                ctx.clip();
+                ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+                ctx.restore();
+            } else {
+                drawFallback();
+                const newImg = new Image();
+                newImg.crossOrigin = 'Anonymous';
+                newImg.onload = () => {
+                    imageCache.current.set(node.avatar!, newImg);
+                    setImagesLoaded(prev => prev + 1);
+                };
+                newImg.onerror = () => {
+                    console.warn(`Failed to load image (CORS or broken link): ${node.avatar}`);
+                    brokenImageCache.current.add(node.avatar!);
+                    setImagesLoaded(prev => prev + 1);
+                };
+                newImg.src = node.avatar!;
+            }
+        } else {
+            drawFallback();
         }
 
         // Node border
@@ -227,7 +239,7 @@ export default function GraphCanvas({
       cancelAnimationFrame(animationFrameId);
       resizeObserver.disconnect();
     };
-  }, [positionedNodes, connections, highlightedNodes, highlightedConnections, zoom, offset]);
+  }, [positionedNodes, connections, highlightedNodes, highlightedConnections, zoom, offset, imagesLoaded]);
 
   const handleMouseDown = (e: MouseEvent) => {
     if (!canvasRef.current) return;
@@ -272,6 +284,17 @@ export default function GraphCanvas({
     setZoom(newZoom);
   };
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel);
+    };
+  }, [zoom]);
+
   const resetView = () => {
     setZoom(1);
     setOffset({ x: 0, y: 0 });
@@ -287,7 +310,6 @@ export default function GraphCanvas({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
       />
 
       {/* Controls */}
