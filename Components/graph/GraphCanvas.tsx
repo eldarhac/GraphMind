@@ -50,8 +50,9 @@ export default function GraphCanvas({
 
     const centerX = canvasSize.width / 2;
     const centerY = canvasSize.height / 2;
-    // Spread satellites based on available canvas size
-    const radius = Math.min(centerX, centerY) * 0.9;
+    // Spread satellites based on available canvas size. Push them near the edges
+    // of the canvas to emphasize empty space between core and periphery.
+    const radius = Math.min(canvasSize.width, canvasSize.height) * 0.45;
 
     satelliteNodes.forEach((node, idx) => {
       const angle = (2 * Math.PI / satelliteNodes.length) * idx;
@@ -63,8 +64,9 @@ export default function GraphCanvas({
 
     coreNodes.forEach(node => {
       node.node_position = node.node_position || {
-        x: centerX + (Math.random() - 0.5) * 120,
-        y: centerY + (Math.random() - 0.5) * 120
+        // Keep the core tightly clustered in the middle
+        x: centerX + (Math.random() - 0.5) * 80,
+        y: centerY + (Math.random() - 0.5) * 80
       };
     });
 
@@ -184,16 +186,34 @@ export default function GraphCanvas({
           const controlX = midX + perpX;
           const controlY = midY + perpY;
 
-          // Draw curved connection
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(controlX, controlY, x2, y2);
-          
+          // Draw only short "wispy" segments from each node along the curve
+          const t = 0.15; // percentage of the curve length to draw
+          const quadPoint = (tVal: number) => {
+            const inv = 1 - tVal;
+            return {
+              x: inv * inv * x1 + 2 * inv * tVal * controlX + tVal * tVal * x2,
+              y: inv * inv * y1 + 2 * inv * tVal * controlY + tVal * tVal * y2,
+            };
+          };
+
+          const startPointA = quadPoint(t);
+          const startPointB = quadPoint(1 - t);
+
           const connType = (connection as any).type || (connection as any).connection_type;
-          ctx.strokeStyle = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
+          const color = isHighlighted ? '#3B82F6' : (connectionColors[connType] || '#475569');
+          ctx.strokeStyle = color;
           ctx.lineWidth = isHighlighted ? 4 : 2;
           ctx.globalAlpha = isHighlighted ? 1 : 0.8;
           ctx.lineCap = 'round';
+
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo(controlX, controlY, startPointA.x, startPointA.y);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(x2, y2);
+          ctx.quadraticCurveTo(controlX, controlY, startPointB.x, startPointB.y);
           ctx.stroke();
           
           // Draw connection label on hover/highlight
@@ -217,95 +237,28 @@ export default function GraphCanvas({
         const { x, y } = node.node_position;
         const isHighlighted = highlightedNodes.includes(node.id);
 
-        const radius = isHighlighted ? 12 : 10;
-        const hasAvatar = node.avatar && !brokenImageCache.current.has(node.avatar);
-
-        // Node shadow
-        ctx.globalAlpha = 0.3;
-        ctx.beginPath();
-        ctx.arc(x + 2, y + 2, radius, 0, 2 * Math.PI);
-        ctx.fillStyle = '#000000';
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
-
-        const drawFallback = () => {
-          ctx.beginPath();
-          ctx.arc(x, y, radius, 0, 2 * Math.PI);
-          const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-          if (isHighlighted) {
-            gradient.addColorStop(0, '#60A5FA');
-            gradient.addColorStop(1, '#1E40AF');
-          } else {
-            gradient.addColorStop(0, '#64748B');
-            gradient.addColorStop(1, '#334155');
-          }
-          ctx.fillStyle = gradient;
-          ctx.fill();
-        };
-
-        if (hasAvatar) {
-          const img = imageCache.current.get(node.avatar!);
-          if (img) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            ctx.clip();
-            ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
-            ctx.restore();
-          } else {
-            drawFallback();
-            const newImg = new Image();
-            newImg.crossOrigin = 'Anonymous';
-            newImg.onload = () => {
-              imageCache.current.set(node.avatar!, newImg);
-              setImagesLoaded(prev => prev + 1);
-            };
-            newImg.onerror = () => {
-              console.warn(`Failed to load image (CORS or broken link): ${node.avatar}`);
-              brokenImageCache.current.add(node.avatar!);
-              setImagesLoaded(prev => prev + 1);
-            };
-            newImg.src = node.avatar!;
-          }
-        } else {
-          drawFallback();
-        }
-
-        // Node border
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, 2 * Math.PI);
-        ctx.strokeStyle = isHighlighted ? '#1E40AF' : '#475569';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Node label with background when zoomed in
-        if (zoom >= LABEL_VISIBILITY_ZOOM_THRESHOLD) {
-          const label = node.name || 'Unknown';
-          const fontSize = Math.min(10, 10 * zoom);
+        if (node.layoutType === 'satellite') {
+          // Draw initials for satellites
+          const name = node.name || '';
+          const initials = name
+            .split(/\s+/)
+            .map(w => w[0])
+            .join('')
+            .toUpperCase()
+            .slice(0, 2);
+          ctx.fillStyle = '#F8FAFC';
+          const fontSize = isHighlighted ? 14 : 12;
           ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
           ctx.textAlign = 'center';
-          ctx.textBaseline = 'top';
-          const padding = 2;
-          const textWidth = ctx.measureText(label).width;
-          const bgX = x - textWidth / 2 - padding;
-          const bgY = y + radius + 4;
-          const bgHeight = fontSize + padding * 2;
-          const bounds = { x: bgX, y: bgY, width: textWidth + padding * 2, height: bgHeight };
-          const intersects = drawnLabelBounds.some(b =>
-            bounds.x < b.x + b.width &&
-            bounds.x + bounds.width > b.x &&
-            bounds.y < b.y + b.height &&
-            bounds.y + bounds.height > b.y
-          );
-          if (!intersects) {
-            ctx.fillStyle = 'rgba(15,23,42,0.7)';
-            ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
-            ctx.fillStyle = '#F8FAFC';
-            ctx.fillText(label, x, bgY + padding);
-            ctx.textBaseline = 'alphabetic';
-            drawnLabelBounds.push(bounds);
-          }
+          ctx.textBaseline = 'middle';
+          ctx.fillText(initials, x, y);
+        } else {
+          // Core nodes as small points of light
+          const radius = isHighlighted ? 5 : 3;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, 2 * Math.PI);
+          ctx.fillStyle = isHighlighted ? '#60A5FA' : '#FFFFFF';
+          ctx.fill();
         }
       });
 
