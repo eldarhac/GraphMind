@@ -39,13 +39,15 @@ export async function inferConnection(personA: string, personB: string) {
     embeddingNodeProperty: 'embedding',
   });
 
-  const [docsA] = await vectorStore.similaritySearch(personA, 1);
-  const [docsB] = await vectorStore.similaritySearch(personB, 1);
+  const [[docsA, scoreA]] = await vectorStore.similaritySearchWithScore(personA, 1);
+  const [[docsB, scoreB]] = await vectorStore.similaritySearchWithScore(personB, 1);
   if (!docsA || !docsB) return 'No matching participants found.';
 
-  const score = docsA.score && docsB.score ? (docsA.score + docsB.score) / 2 : 0;
-  const response = await llm.invoke(`Explain why ${personA} and ${personB} might be professionally connected. Their similarity score is ${score.toFixed(2)}.`);
-  return response;
+  const score = scoreA && scoreB ? (scoreA + scoreB) / 2 : 0;
+  const aiMessage = await llm.invoke(
+    `Explain why ${personA} and ${personB} might be professionally connected. Their similarity score is ${score.toFixed(2)}.`
+  );
+  return aiMessage.content;
 }
 
 /** Simple intent router */

@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@langchain/community": "^0.3.47",
     "@langchain/openai": "^0.5.14",
     "@supabase/supabase-js": "^2.50.0",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.0.24",
+    "langchain": "^0.3.29",
     "lucide-react": "^0.363.0",
     "neo4j-driver": "^5.28.1",
     "openai": "^4.47.1",
