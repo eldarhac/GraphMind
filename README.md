@@ -80,6 +80,20 @@ The project is organized into several key directories:
 -   `vite.config.js`: Vite configuration.
 -   `tsconfig.json`: TypeScript configuration.
 
+## Graph Intelligence Agent
+
+GraphMind now includes a LangChain-powered agent that can analyze your Neo4j database. It supports two modes:
+
+1. **Cypher Pathfinding** – Uses Neo4j's `shortestPath` to explain how two people are directly connected.
+2. **Inference Engine** – Leverages vector embeddings stored in Neo4j to suggest potential relationships based on semantic similarity.
+
+Try questions like:
+
+```text
+Show me the shortest path between Alice Doe and Bob Smith.
+Are there any potential connections between Scott Harris and Jennifer Smith based on their careers?
+```
+
 ---
 
 This README provides a comprehensive overview of the GraphMind project. 

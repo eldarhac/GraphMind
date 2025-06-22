@@ -1,17 +1,31 @@
 import { InvokeLLM } from '@/integrations/Core';
 import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
+import { processGraphQuery } from '@/integrations/graph-intelligence-agent';
 
 export default class QueryProcessor {
   static async processQuery(message: string, currentUser: Person, graphData: { nodes: Person[], connections: Connection[] }) {
     const startTime = Date.now();
     
     try {
+      const lower = message.toLowerCase();
+
+      if (lower.includes('connected') || lower.includes('path') || lower.includes('similar')) {
+        const graphResponse = await processGraphQuery(message);
+        const processingTime = Date.now() - startTime;
+        return {
+          response: typeof graphResponse === 'string' ? graphResponse : JSON.stringify(graphResponse),
+          intent: 'graph',
+          graphAction: null,
+          processingTime
+        };
+      }
+
       // Temporarily bypass the intent/graph logic to route directly to Text-to-SQL
       const sqlResponse = await processTextToSqlQuery(message);
 
       const processingTime = Date.now() - startTime;
-      
+
       return {
         response: sqlResponse,
         intent: "text_to_sql", // A new intent for our new flow
