@@ -9,6 +9,7 @@ export default class QueryProcessor {
 
     // Remove any '@' characters from the incoming message so the LLM sees clean names
     const cleanedMessage = message.replace(/@/g, '');
+    console.log('[DEBUG 1] Cleaned Message for AI:', cleanedMessage);
     
     try {
       // --- Intent Classification Router ---
@@ -78,10 +79,21 @@ export default class QueryProcessor {
                   connection_type: { type: "string" }
                 }
               },
-              confidence: { type: "number" }
+          confidence: { type: "number" }
             }
           }
         });
+        console.log('[DEBUG 2] Extracted Entities:', JSON.stringify(intentResult, null, 2));
+
+        if (!intentResult.entities || intentResult.entities.length < 2) {
+          console.error('[DEBUG 4] Entity extraction failed or found less than 2 people.');
+          return {
+            response: "I couldn't identify two specific people in your request. Please try again using the '@' mention feature, for example: 'path between @Person A and @Person B'.",
+            intent: 'error',
+            graphAction: null,
+            processingTime: Date.now() - startTime
+          };
+        }
 
         // Step 2: Execute graph query based on intent
         const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
@@ -91,6 +103,7 @@ export default class QueryProcessor {
         if (intentResult.intent === 'find_path' && intentResult.entities.length >= 2) {
           const [person1, person2] = intentResult.entities;
           finalGraphQuery = `What is the shortest path between ${person1} and ${person2}?`;
+          console.log('[DEBUG 3] Final Query for GraphChain:', finalGraphQuery);
         }
         const response = await queryGraph({ query: finalGraphQuery });
         const finalText = typeof response === 'object' && response !== null && 'result' in response
