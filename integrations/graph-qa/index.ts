@@ -1,6 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { Neo4jGraph } from '@langchain/community/graphs/neo4j_graph';
 import { GraphCypherQAChain } from 'langchain/chains/graph_qa/cypher';
+import { PromptTemplate } from '@langchain/core/prompts';
 import { getFromCache, setToCache } from '../common/caching';
 import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { OpenAIEmbeddings } from "@langchain/openai";
@@ -21,6 +22,28 @@ const llm = new ChatOpenAI({
   openAIApiKey: import.meta.env.VITE_OPENAI_API_KEY!,
 });
 
+// Custom prompt that forces the LLM to build a precise Cypher query for
+// shortest-path questions between participants. The generated Cypher should
+// always use the :Participant label with the name property and return the path
+// object so we can interpret it later.
+export const CYPHER_GENERATION_PROMPT = PromptTemplate.fromTemplate(
+  `You are an expert Neo4j Cypher generator. Use the schema below to build a query answering the user's question.\n` +
+  `- Always match participants as (:Participant {name: '<name>'}).\n` +
+  `- Always use the shortestPath() function for pathfinding.\n` +
+  `- The query must return the path object using RETURN p.\n` +
+  `Schema:\n{schema}\n\nQuestion: {question}\nCypher:`
+);
+
+// Prompt for turning the path result into a human readable narrative.
+export const QA_PROMPT = PromptTemplate.fromTemplate(
+  `You are a network analysis assistant. Use the context from a Cypher query to explain the connection between the people in the question.\n` +
+  `Parse the context JSON to obtain the ordered Participant nodes and SHARED_EXPERIENCE relationships.\n` +
+  `For each relationship, describe the connection using the properties type, institutionName, overlapStartDate, and overlapEndDate.\n` +
+  `Write one sentence per step and combine them into a coherent paragraph.\n` +
+  `If the context is empty, reply with "I could not find a direct professional or academic path between" followed by the two names.\n` +
+  `Provide only plain text.\n\nQuestion: {question}\nContext: {context}\nAnswer:`
+);
+
 
 export async function queryGraph(params: {
   query: string;
@@ -39,6 +62,8 @@ export async function queryGraph(params: {
   const chain = GraphCypherQAChain.fromLLM({
     llm,
     graph,
+    cypherPrompt: CYPHER_GENERATION_PROMPT,
+    qaPrompt: QA_PROMPT,
   });
 
   const response = await chain.invoke({ query });
