@@ -6,11 +6,14 @@ import { queryGraph } from '@/integrations/graph-qa';
 export default class QueryProcessor {
   static async processQuery(message: string, currentUser: Person, graphData: { nodes: Person[], connections: Connection[] }) {
     const startTime = Date.now();
+
+    // Remove any '@' characters from the incoming message so the LLM sees clean names
+    const cleanedMessage = message.replace(/@/g, '');
     
     try {
       // --- Intent Classification Router ---
       const routerResult = await InvokeLLM({
-        prompt: `Based on the user's question, classify the intent.\n- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.\n- If the question is about facts, lists, attributes, or aggregates (like 'who works at X' or 'count all Y'), respond with {"intent": "relational_query"}.\n\nUser Question: "${message}"`,
+        prompt: `Based on the user's question, classify the intent.\n- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.\n- If the question is about facts, lists, attributes, or aggregates (like 'who works at X' or 'count all Y'), respond with {"intent": "relational_query"}.\n\nUser Question: "${cleanedMessage}"`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -29,7 +32,9 @@ export default class QueryProcessor {
         const personNames = graphData.nodes.map(n => n.name);
         const intentResult: IntentData = await InvokeLLM({
           prompt: `
-            Analyze this user query for a graph-based network assistant: "${message}"
+            Analyze this user query for a graph-based network assistant: "${cleanedMessage}"
+
+            Participant names may appear with an '@' prefix; remove any '@' symbols when extracting the names.
 
             The user asking the question is "${currentUser.name}".
             If the intent is 'find_path' and only one person is mentioned, assume the path is from the current user to that person.
@@ -82,7 +87,12 @@ export default class QueryProcessor {
         const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
 
         // Step 3: Generate natural language response
-        const response = await queryGraph({ query: message });
+        let finalGraphQuery = cleanedMessage;
+        if (intentResult.intent === 'find_path' && intentResult.entities.length >= 2) {
+          const [person1, person2] = intentResult.entities;
+          finalGraphQuery = `What is the shortest path between ${person1} and ${person2}?`;
+        }
+        const response = await queryGraph({ query: finalGraphQuery });
         const finalText = typeof response === 'object' && response !== null && 'result' in response
           ? (response as any).result
           : (typeof response === 'string' ? response : JSON.stringify(response));
@@ -96,7 +106,7 @@ export default class QueryProcessor {
           processingTime
         };
       } else {
-        const sqlResponse = await processTextToSqlQuery(message);
+        const sqlResponse = await processTextToSqlQuery(cleanedMessage);
 
         const processingTime = Date.now() - startTime;
 

@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import ForceGraph2D, { NodeObject, LinkObject } from 'react-force-graph-2d';
+import ForceGraph2D from 'react-force-graph-2d';
+type NodeObject = any;
+type LinkObject = any;
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
@@ -36,7 +38,7 @@ export default function GraphCanvas({
   highlightedConnections = [],
   onNodeClick,
 }: GraphCanvasProps) {
-  const fgRef = useRef<any>();
+  const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [avatarImages, setAvatarImages] = useState<Record<string, HTMLImageElement>>({});
@@ -144,7 +146,7 @@ export default function GraphCanvas({
           ctx.restore();
         } else {
         // Fallback to initials if no image
-        const initials = name?.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '';
+        const initials = name?.split(/\s+/).map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) || '';
         const fontSize = radius;
         ctx.font = `${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';

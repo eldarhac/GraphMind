@@ -13,7 +13,7 @@ const openai = new OpenAI({
 
 export async function callOpenAI(prompt: string, jsonSchema?: any): Promise<any> {
   try {
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    const messages: any[] = [
       {
         role: "system",
         content: jsonSchema 
