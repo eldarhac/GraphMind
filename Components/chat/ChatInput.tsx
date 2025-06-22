@@ -17,7 +17,7 @@ export default function ChatInput({
   onMentionInserted
 }: ChatInputProps) {
   const [inputValue, setInputValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
 
   const suggestions = [
@@ -34,8 +34,8 @@ export default function ChatInput({
       const start = input.selectionStart || 0;
       const end = input.selectionEnd || 0;
       
-      // Insert the mention at cursor position (without @ symbol)
-      const mentionText = pendingMention.name;
+      // Insert the mention at cursor position (with @ symbol)
+      const mentionText = `@${pendingMention.name}`;
       const newValue = inputValue.slice(0, start) + mentionText + inputValue.slice(end);
       
       setInputValue(newValue);
@@ -51,26 +51,53 @@ export default function ChatInput({
       
       onMentionInserted?.();
     }
-  }, [pendingMention, inputValue, onMentionInserted]);
+  }, [pendingMention]);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      const textarea = inputRef.current;
+      textarea.style.height = 'auto';
+
+      const computed = getComputedStyle(textarea);
+      const lineHeight = parseFloat(computed.lineHeight) || (parseFloat(computed.fontSize) * 1.5);
+      const paddingTop = parseFloat(computed.paddingTop);
+      const paddingBottom = parseFloat(computed.paddingBottom);
+
+      const maxHeight = (5 * lineHeight) + paddingTop + paddingBottom;
+
+      if (textarea.scrollHeight > maxHeight) {
+        textarea.style.height = `${maxHeight}px`;
+        textarea.style.overflowY = 'auto';
+      } else {
+        textarea.style.height = `${textarea.scrollHeight}px`;
+        textarea.style.overflowY = 'hidden';
+      }
+    }
+  }, [inputValue]);
 
   const handleSuggestionClick = (suggestion: string) => {
     setInputValue(suggestion);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const submitMessage = () => {
     if (inputValue.trim() && !isProcessing) {
-      // Add @ prefix to mentions when sending
-      const processedMessage = inputValue.replace(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g, (match) => {
-        // Check if this name exists in our graph data (you might want to pass this as a prop)
-        return `@${match}`;
-      });
-      onSendMessage(processedMessage);
+      onSendMessage(inputValue.trim());
       setInputValue('');
     }
   };
+  
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    submitMessage();
+  };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitMessage();
+      return;
+    }
     // Update cursor position for mention insertion
     setTimeout(() => {
       if (inputRef.current) {
@@ -88,9 +115,9 @@ export default function ChatInput({
     }, 0);
   };
 
-  // Render input with mentions highlighted (now without @ symbol)
+  // Render input with mentions highlighted (now with @ symbol)
   const renderInputContent = () => {
-    const mentionRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    const mentionRegex = /@([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g;
     const parts = [];
     let lastIndex = 0;
     let match;
@@ -104,7 +131,7 @@ export default function ChatInput({
         });
       }
       
-      // Add mention (names that start with capital letters)
+      // Add mention (names that start with @)
       parts.push({
         type: 'mention',
         content: match[0]
@@ -144,7 +171,7 @@ export default function ChatInput({
               <span
                 key={index}
                 className={part.type === 'mention' 
-                  ? 'bg-blue-500/30 text-blue-300 px-2 py-1 rounded-lg border border-blue-500/50' 
+                  ? 'bg-blue-500/30 text-blue-300 px-1 rounded' 
                   : 'text-white'
                 }
               >
@@ -154,21 +181,22 @@ export default function ChatInput({
           </div>
           
           {/* Actual input */}
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
             value={inputValue}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onClick={handleClick}
             placeholder=""
-            className="w-full p-3 rounded-xl bg-transparent border-transparent text-transparent placeholder-transparent focus:outline-none relative z-10"
+            rows={1}
+            className="w-full p-3 rounded-xl bg-transparent border-transparent text-transparent placeholder-transparent focus:outline-none relative z-10 resize-none"
             style={{ 
               caretColor: 'white',
               color: 'transparent',
               background: 'transparent',
               border: 'none',
-              outline: 'none'
+              outline: 'none',
+              minHeight: '3rem',
             }}
             disabled={isProcessing}
           />

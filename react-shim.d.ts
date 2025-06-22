@@ -19,7 +19,11 @@ declare module 'react' {
     render: (props: P, ref: { current: T | null }) => JSX.Element | null
   ): any;
   export const createElement: any;
-  export interface FormEvent<T = Element> { target: T; preventDefault(): void; }
+  export interface FormEvent<T = Element> { 
+    target: EventTarget & T; 
+    preventDefault(): void; 
+    currentTarget: T;
+  }
   export interface ChangeEvent<T = Element> { target: T; }
   export interface KeyboardEvent<T = Element> { key: string; preventDefault(): void; }
   export interface MouseEvent<T = Element> { target: T; preventDefault(): void; }

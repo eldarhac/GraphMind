@@ -165,22 +165,24 @@ async function textToSql(question: string): Promise<any> {
 }
 */
 
-async function executeSql(sql: string): Promise<any[] | null> {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-
+export async function executeSql(query: string) {
   try {
-    const { data, error } = await supabase.rpc('execute_sql', { sql_query: sql });
-
+    const { data, error } = await supabase.rpc('execute_sql', { query });
+    
     if (error) {
-      console.error('Error executing SQL query via RPC:', error);
-      console.error('Full error details:', JSON.stringify(error, null, 2));
-      return [{ error: `Database error: ${error.message || error.code || 'Unknown error'}` }];
+      console.error("Error executing SQL query via RPC:", error);
+      console.error("Full error details:", JSON.stringify(error, null, 2));
+      return { error: error.message, data: null };
     }
     
-    return data;
-  } catch (error) {
-    console.error('An unexpected error occurred during RPC call:', error);
-    return [{ error: 'An unexpected error occurred.' }];
+    return { error: null, data };
+
+  } catch (rpcError) {
+    console.error("Caught an exception during RPC call:", rpcError);
+    return { 
+      error: rpcError instanceof Error ? rpcError.message : "An unknown RPC error occurred.", 
+      data: null 
+    };
   }
 }
 

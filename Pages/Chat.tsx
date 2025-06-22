@@ -90,7 +90,8 @@ Click on any person in the graph to mention them in your message!`,
       const result = await QueryProcessor.processQuery(
         messageText, 
         currentUser,
-        graphData
+        graphData,
+        messages
       );
 
       // Create assistant response

@@ -4,6 +4,7 @@ import { getFromCache, setToCache } from './caching';
 // This is the main, public-facing function.
 export async function InvokeLLM(params: {
   prompt: string;
+  system_prompt?: string;
   response_json_schema?: any;
   add_context_from_internet?: boolean;
   file_urls?: string[];

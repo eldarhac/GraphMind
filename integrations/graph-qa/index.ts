@@ -7,6 +7,7 @@ import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase"
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { createClient } from "@supabase/supabase-js";
 import { RetrievalQAChain } from "langchain/chains";
+import { ChatMessage } from '@/Entities/all';
 
 // --- Existing Neo4j Graph Q&A Setup ---
 
@@ -28,32 +29,45 @@ const llm = new ChatOpenAI({
 // object so we can interpret it later.
 export const CYPHER_GENERATION_PROMPT = PromptTemplate.fromTemplate(
   `You are an expert Neo4j Cypher generator. Use the schema below to build a query answering the user's question.\n` +
-  `- Always match participants as (:Participant {{name: '<name>'}}).\n` +
-  `- Always use the shortestPath() function for pathfinding.\n` +
+  `- Always match participants as (:Participant {{name: '<n>'}}).\n` +
+  `- For direct path questions, use shortestPath() function.\n` +
+  `- For indirect path questions or when asked about alternative paths, use allShortestPaths() or specify maxLength > 1.\n` +
+  `- If the question asks about "indirect" paths, look for paths with length 2 or more: shortestPath((a)-[*2..5]-(b)).\n` +
   `- The query must return the path object using RETURN p.\n` +
+  `- Consider conversation context when determining path search strategy.\n` +
   `Schema:\n{schema}\n\nQuestion: {question}\nCypher:`
 );
 
-// Prompt for turning the path result into a human readable narrative.
+// Updated prompt for turning the path result into a human readable narrative with chat history context.
 export const QA_PROMPT = PromptTemplate.fromTemplate(
   `You are a network analysis assistant. Use the context from a Cypher query to explain the connection between the people in the question.\n` +
   `Parse the context JSON to obtain the ordered Participant nodes and SHARED_EXPERIENCE relationships.\n` +
   `For each relationship, describe the connection using the properties type, institutionName, overlapStartDate, and overlapEndDate.\n` +
   `Write one sentence per step and combine them into a coherent paragraph.\n` +
   `If the context is empty, reply with "I could not find a direct professional or academic path between" followed by the two names.\n` +
+  `Consider the conversation history when forming your response to maintain context and avoid repetition.\n` +
+  `If the question appears to be a follow-up (like "indirect", "what about", etc.), understand it in context of the previous conversation.\n` +
+  `For follow-up questions about indirect paths, search for longer paths or alternative connections beyond direct relationships.\n` +
   `Provide only plain text.\n\nQuestion: {question}\nContext: {context}\nAnswer:`
 );
 
 
 export async function queryGraph(params: {
   query: string;
-  use_cache?: boolean; 
+  use_cache?: boolean;
+  chatHistory?: ChatMessage[];
 }) {
   const useCache = params.use_cache !== false;
-  const { query } = params;
+  const { query, chatHistory = [] } = params;
+
+  // Create cache key that includes recent chat history context
+  const cacheKey = { 
+    query, 
+    recentHistory: chatHistory.slice(-3).map(msg => `${msg.sender}: ${msg.message}`) 
+  };
 
   if (useCache) {
-    const cachedResponse = getFromCache({ query });
+    const cachedResponse = getFromCache(cacheKey);
     if (cachedResponse) return cachedResponse;
   }
 
@@ -69,7 +83,7 @@ export async function queryGraph(params: {
   const response = await chain.invoke({ query });
 
   if (useCache) {
-    setToCache({ query }, response);
+    setToCache(cacheKey, response);
   }
 
   return response;

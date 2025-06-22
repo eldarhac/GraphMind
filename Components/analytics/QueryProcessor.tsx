@@ -1,41 +1,55 @@
 import { InvokeLLM } from '@/integrations/Core';
-import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult } from '@/Entities/all';
+import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, ChatMessage } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
-import { queryGraph } from '@/integrations/graph-qa';
+import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
 
 export default class QueryProcessor {
-  static async processQuery(message: string, currentUser: Person, graphData: { nodes: Person[], connections: Connection[] }) {
+  static async processQuery(
+    message: string, 
+    currentUser: Person, 
+    graphData: { nodes: Person[], connections: Connection[] },
+    chatHistory: ChatMessage[] = []
+  ) {
     const startTime = Date.now();
-
-    // Remove any '@' characters from the incoming message so the LLM sees clean names
-    const cleanedMessage = message.replace(/@/g, '');
-    console.log('[DEBUG 1] Cleaned Message for AI:', cleanedMessage);
     
     try {
+      // Create chat history context
+      const chatContext = this.formatChatHistory(chatHistory);
+      const contextualMessage = chatContext ? 
+        `${chatContext}\n\nCurrent question: ${message}\n\nPlease answer the current question while considering the conversation history for context. If the current question refers to previous topics, use that context appropriately.` : 
+        message;
+
       // --- Intent Classification Router ---
       const routerResult = await InvokeLLM({
-        prompt: `Based on the user's question, classify the intent.\n- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.\n- If the question is about facts, lists, attributes, or aggregates (like 'who works at X' or 'count all Y'), respond with {"intent": "relational_query"}.\n\nUser Question: "${cleanedMessage}"`,
+        prompt: `Based on the user's question and chat history, classify the intent.
+- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.
+- If the question is a general knowledge question about a person, their experience, or facts that might be stored in a document or profile (e.g., "Who worked at Google?", "Tell me about Dr. Smith's research"), respond with {"intent": "knowledge_base_qa"}.
+- If the question is about specific facts, lists, or aggregates that require a precise database query (like 'who works at X and Y' or 'count all Y'), respond with {"intent": "relational_query"}.
+
+Chat History and Current Question:
+${contextualMessage}`,
         response_json_schema: {
           type: "object",
           properties: {
             intent: {
               type: "string",
-              enum: ["graph_query", "relational_query"]
+              enum: ["graph_query", "knowledge_base_qa", "relational_query"]
             }
           }
         }
       });
 
-      const classifiedIntent = (routerResult as any).intent || 'relational_query';
+      const classifiedIntent = (routerResult as any).intent || 'knowledge_base_qa';
 
       if (classifiedIntent === 'graph_query') {
-        // Step 1: Extract intent and entities from user message
+        // Step 1: Extract intent and entities from user message with chat context
         const personNames = graphData.nodes.map(n => n.name);
         const intentResult: IntentData = await InvokeLLM({
           prompt: `
-            Analyze this user query for a graph-based network assistant: "${cleanedMessage}"
+            Analyze this user query for a graph-based network assistant, considering the chat history for context.
 
-            Participant names may appear with an '@' prefix; remove any '@' symbols when extracting the names.
+            Chat History and Current Question:
+            ${contextualMessage}
 
             The user asking the question is "${currentUser.name}".
             If the intent is 'find_path' and only one person is mentioned, assume the path is from the current user to that person.
@@ -45,7 +59,7 @@ export default class QueryProcessor {
 
             Your task:
             1.  Determine the user's intent (e.g., find_path).
-            2.  Extract the entities (person names, topics) from the query.
+            2.  Extract the entities (person names, topics) from the query, considering chat history context.
             3.  **Crucially, fuzzy match the extracted person names against the provided list of people. If you find a close match, use the exact name from the list.** For example, if the user says "Dr. Marcus Smith" and "Dr. Marcus Thorne" is in the list, you MUST return "Dr. Marcus Thorne" in the entities array.
 
             Return the corrected entities in the final JSON output.
@@ -98,14 +112,11 @@ export default class QueryProcessor {
         // Step 2: Execute graph query based on intent
         const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
 
-        // Step 3: Generate natural language response
-        let finalGraphQuery = cleanedMessage;
-        if (intentResult.intent === 'find_path' && intentResult.entities.length >= 2) {
-          const [person1, person2] = intentResult.entities;
-          finalGraphQuery = `What is the shortest path between ${person1} and ${person2}?`;
-          console.log('[DEBUG 3] Final Query for GraphChain:', finalGraphQuery);
-        }
-        const response = await queryGraph({ query: finalGraphQuery });
+        // Step 3: Generate natural language response with chat history context
+        const response = await queryGraph({ 
+          query: contextualMessage,
+          chatHistory: chatHistory 
+        });
         const finalText = typeof response === 'object' && response !== null && 'result' in response
           ? (response as any).result
           : (typeof response === 'string' ? response : JSON.stringify(response));
@@ -116,6 +127,15 @@ export default class QueryProcessor {
           response: finalText,
           intent: intentResult.intent,
           graphAction: this.generateGraphAction(intentResult, graphResults),
+          processingTime
+        };
+      } else if (classifiedIntent === 'knowledge_base_qa') {
+        const qaResponse = await answerQuestionAboutPerson(message);
+        const processingTime = Date.now() - startTime;
+        return {
+          response: qaResponse,
+          intent: "knowledge_base_qa",
+          graphAction: null,
           processingTime
         };
       } else {
@@ -140,6 +160,27 @@ export default class QueryProcessor {
         processingTime: Date.now() - startTime
       };
     }
+  }
+
+  private static formatChatHistory(chatHistory: ChatMessage[]): string {
+    if (!chatHistory || chatHistory.length === 0) return '';
+    
+    // Take last 5 messages for context (excluding welcome message)
+    const recentMessages = chatHistory
+      .filter(msg => msg.id !== 'welcome')
+      .slice(-5);
+    
+    if (recentMessages.length === 0) return '';
+    
+    const formattedHistory = "Previous conversation:\n" + 
+      recentMessages
+        .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.message}`)
+        .join('\n');
+    
+    // Debug log to verify chat history is being processed
+    console.log('Chat History Context:', formattedHistory);
+    
+    return formattedHistory;
   }
 
   static async executeGraphQuery(intentData: IntentData, graphData: { nodes: Person[], connections: Connection[] }): Promise<GraphResults> {
