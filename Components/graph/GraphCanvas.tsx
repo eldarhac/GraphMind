@@ -136,13 +136,13 @@ export default function GraphCanvas({
 
     // Draw avatar image
     if (avatarImg && avatarImg.complete && avatarImg.naturalWidth > 0) {
-        ctx.save();
-        ctx.beginPath();
+          ctx.save();
+          ctx.beginPath();
         ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
-        ctx.clip();
+          ctx.clip();
         ctx.drawImage(avatarImg, x! - radius, y! - radius, radius * 2, radius * 2);
-        ctx.restore();
-    } else {
+          ctx.restore();
+        } else {
         // Fallback to initials if no image
         const initials = name?.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '';
         const fontSize = radius;
@@ -158,10 +158,10 @@ export default function GraphCanvas({
       const fontSize = 12 / globalScale;
       ctx.font = `${fontSize}px Inter, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+          ctx.textBaseline = 'middle';
       ctx.fillStyle = '#F8FAFC';
       ctx.fillText(label, x!, y! + radius + fontSize);
-    }
+        }
   }, []);
 
   const linkCanvasObject = useCallback((link: LinkObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -180,7 +180,7 @@ export default function GraphCanvas({
     
     // Only draw WORK and STUDY connections
     if (graphLink.type !== 'WORK' && graphLink.type !== 'STUDY') {
-        return;
+      return;
     }
     
     const color = CONNECTION_TYPE_COLOR[graphLink.type];

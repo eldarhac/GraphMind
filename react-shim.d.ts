@@ -7,8 +7,9 @@ declare module 'react' {
   export interface FC<P = {}> {
     (props: P): JSX.Element | null;
   }
-  export function useState<T>(initial: T): [T, (value: T) => void];
+  export function useState<T>(initial: T): [T, (value: T | ((prev: T) => T)) => void];
   export function useEffect(effect: () => void | (() => void), deps?: any[]): void;
+  export function useRef<T>(initial: T | null): { current: T | null };
   export const createElement: any;
   export interface FormEvent<T = Element> { target: T; preventDefault(): void; }
   export interface ChangeEvent<T = Element> { target: T; }

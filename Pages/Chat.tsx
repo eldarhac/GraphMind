@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { getHybridGraphData } from "@/services/hybridDataService";
 import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
 import GraphCanvas from "@/Components/graph/GraphCanvas";
 import QueryProcessor from "@/Components/analytics/QueryProcessor";
+import { Mention } from "@/types/mentions";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -15,6 +17,9 @@ export default function ChatPage() {
   const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
   const [highlightedConnections, setHighlightedConnections] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<Person | null>(null);
+  const [graphPanelWidth, setGraphPanelWidth] = useState(50); // percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const [pendingMention, setPendingMention] = useState<Mention | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,7 +59,8 @@ I'm your intelligent network assistant. I can help you:
 • Identify similar professionals
 • Explore network bridges and key connectors
 
-Try asking: "How am I connected to Dr. Smith?" or "Who are the top AI researchers?"`,
+Try asking: "How am I connected to Dr. Smith?" or "Who are the top AI researchers?"
+Click on any person in the graph to mention them in your message!`,
       sender: 'assistant',
       timestamp: new Date(),
       query_type: 'general'
@@ -150,10 +156,61 @@ Try asking: "How am I connected to Dr. Smith?" or "Who are the top AI researcher
     setHighlightedConnections([]);
   };
 
+  const handleNodeClick = (nodeId: string) => {
+    const node = graphData.nodes.find(n => n.id === nodeId);
+    if (node) {
+      // Set pending mention to be inserted at cursor position
+      const mention: Mention = {
+        id: nodeId,
+        name: node.name
+      };
+      
+      setPendingMention(mention);
+    }
+  };
+
+  const handleMentionInserted = () => {
+    // Clear the pending mention after it's been inserted
+    setPendingMention(null);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = (e.clientX / window.innerWidth) * 100;
+      const clampedWidth = Math.max(20, Math.min(80, newWidth));
+      setGraphPanelWidth(100 - clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const toggleGraphPanel = () => {
+    setGraphPanelWidth(prev => prev === 20 ? 50 : 20);
+  };
+
   return (
     <div className="h-screen flex">
       {/* Chat Panel */}
-      <div className="w-1/2 flex flex-col">
+      <div className="flex flex-col" style={{ width: `${100 - graphPanelWidth}%` }}>
         {/* Header */}
         <div className="p-6 border-b border-slate-700/50 glass-effect">
           <div className="flex items-center gap-3">
@@ -204,17 +261,46 @@ Try asking: "How am I connected to Dr. Smith?" or "Who are the top AI researcher
           <ChatInput 
             onSendMessage={handleSendMessage}
             isProcessing={isProcessing}
+            pendingMention={pendingMention}
+            onMentionInserted={handleMentionInserted}
           />
         </div>
       </div>
 
+      {/* Resize Handle */}
+      <div
+        className="w-1 bg-slate-700/50 hover:bg-slate-600 cursor-col-resize flex items-center justify-center group transition-colors"
+        onMouseDown={handleMouseDown}
+      >
+        <div className="w-4 h-12 bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          {graphPanelWidth > 40 ? (
+            <ChevronRight className="w-3 h-3 text-slate-300" />
+          ) : (
+            <ChevronLeft className="w-3 h-3 text-slate-300" />
+          )}
+        </div>
+      </div>
+
       {/* Graph Panel */}
-      <div className="w-1/2 p-6 flex flex-col">
+      <div className="p-6 flex flex-col" style={{ width: `${graphPanelWidth}%` }}>
         {/* Graph Header */}
         <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-white">Network Visualization</h2>
-            <p className="text-sm text-slate-400">Interactive graph exploration</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleGraphPanel}
+              className="p-1 rounded hover:bg-slate-800/50 transition-colors"
+              title={graphPanelWidth === 20 ? "Expand panel" : "Collapse panel"}
+            >
+              {graphPanelWidth === 20 ? (
+                <ChevronLeft className="w-4 h-4 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              )}
+            </button>
+            <div>
+              <h2 className="text-lg font-bold text-white">Network Visualization</h2>
+              <p className="text-sm text-slate-400">Click nodes to mention people</p>
+            </div>
           </div>
           {(highlightedNodes.length > 0 || highlightedConnections.length > 0) && (
             <button
@@ -233,12 +319,7 @@ Try asking: "How am I connected to Dr. Smith?" or "Who are the top AI researcher
             connections={graphData.connections}
             highlightedNodes={highlightedNodes}
             highlightedConnections={highlightedConnections}
-            onNodeClick={(nodeId: string) => {
-              const node = graphData.nodes.find(n => n.id === nodeId);
-              if (node) {
-                handleSendMessage(`Tell me about ${node.name}`);
-              }
-            }}
+            onNodeClick={handleNodeClick}
           />
         </div>
       </div>

@@ -1,14 +1,24 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
+import { Mention } from '@/types/mentions';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
   isProcessing: boolean;
+  pendingMention?: Mention | null;
+  onMentionInserted?: () => void;
 }
 
-export default function ChatInput({ onSendMessage, isProcessing }: ChatInputProps) {
+export default function ChatInput({ 
+  onSendMessage, 
+  isProcessing, 
+  pendingMention,
+  onMentionInserted
+}: ChatInputProps) {
   const [inputValue, setInputValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
   const suggestions = [
     "Find path from me to Dr. Li",
@@ -17,6 +27,32 @@ export default function ChatInput({ onSendMessage, isProcessing }: ChatInputProp
     "Who is a bridge between Quantum Computing and Robotics?",
   ];
 
+  // Insert mention at cursor position when a new mention is pending
+  useEffect(() => {
+    if (pendingMention && inputRef.current) {
+      const input = inputRef.current;
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      
+      // Insert the mention at cursor position (without @ symbol)
+      const mentionText = pendingMention.name;
+      const newValue = inputValue.slice(0, start) + mentionText + inputValue.slice(end);
+      
+      setInputValue(newValue);
+      
+      // Set cursor position after the mention
+      const newCursorPos = start + mentionText.length;
+      setTimeout(() => {
+        if (input) {
+          input.setSelectionRange(newCursorPos, newCursorPos);
+          input.focus();
+        }
+      }, 0);
+      
+      onMentionInserted?.();
+    }
+  }, [pendingMention, inputValue, onMentionInserted]);
+
   const handleSuggestionClick = (suggestion: string) => {
     setInputValue(suggestion);
   };
@@ -24,22 +60,120 @@ export default function ChatInput({ onSendMessage, isProcessing }: ChatInputProp
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (inputValue.trim() && !isProcessing) {
-      onSendMessage(inputValue);
+      // Add @ prefix to mentions when sending
+      const processedMessage = inputValue.replace(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g, (match) => {
+        // Check if this name exists in our graph data (you might want to pass this as a prop)
+        return `@${match}`;
+      });
+      onSendMessage(processedMessage);
       setInputValue('');
     }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Update cursor position for mention insertion
+    setTimeout(() => {
+      if (inputRef.current) {
+        setCursorPosition(inputRef.current.selectionStart || 0);
+      }
+    }, 0);
+  };
+
+  const handleClick = () => {
+    // Update cursor position when clicking in the input
+    setTimeout(() => {
+      if (inputRef.current) {
+        setCursorPosition(inputRef.current.selectionStart || 0);
+      }
+    }, 0);
+  };
+
+  // Render input with mentions highlighted (now without @ symbol)
+  const renderInputContent = () => {
+    const mentionRegex = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionRegex.exec(inputValue)) !== null) {
+      // Add text before mention
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: inputValue.slice(lastIndex, match.index)
+        });
+      }
+      
+      // Add mention (names that start with capital letters)
+      parts.push({
+        type: 'mention',
+        content: match[0]
+      });
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < inputValue.length) {
+      parts.push({
+        type: 'text',
+        content: inputValue.slice(lastIndex)
+      });
+    }
+
+    return parts;
   };
 
   return (
     <div>
       <form onSubmit={handleSubmit} className="flex items-center gap-3">
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Ask about your network..."
-          className="flex-1 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-          disabled={isProcessing}
-        />
+        <div className="flex-1 relative">
+          {/* Background container */}
+          <div className="absolute inset-0 rounded-xl bg-slate-800/50 border border-slate-700/50 focus-within:ring-2 focus-within:ring-blue-500/50"></div>
+          
+          {/* Placeholder */}
+          {!inputValue && (
+            <div className="absolute inset-0 p-3 pointer-events-none text-slate-400">
+              Ask about your network...
+            </div>
+          )}
+          
+          {/* Hidden styled content for visual representation */}
+          <div className="absolute inset-0 p-3 pointer-events-none overflow-hidden whitespace-pre-wrap break-words text-white rounded-xl border border-transparent">
+            {renderInputContent().map((part, index) => (
+              <span
+                key={index}
+                className={part.type === 'mention' 
+                  ? 'bg-blue-500/30 text-blue-300 px-2 py-1 rounded-lg border border-blue-500/50' 
+                  : 'text-white'
+                }
+              >
+                {part.content}
+              </span>
+            ))}
+          </div>
+          
+          {/* Actual input */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={handleClick}
+            placeholder=""
+            className="w-full p-3 rounded-xl bg-transparent border-transparent text-transparent placeholder-transparent focus:outline-none relative z-10"
+            style={{ 
+              caretColor: 'white',
+              color: 'transparent',
+              background: 'transparent',
+              border: 'none',
+              outline: 'none'
+            }}
+            disabled={isProcessing}
+          />
+        </div>
+        
         <button
           type="submit"
           disabled={isProcessing || !inputValue.trim()}
