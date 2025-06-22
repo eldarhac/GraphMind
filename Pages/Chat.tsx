@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { getHybridGraphData } from "@/services/hybridDataService";
 import { motion, AnimatePresence } from "framer-motion";

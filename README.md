@@ -11,6 +11,8 @@ This project was built from the ground up, starting with a collection of React c
 -   **Advanced Graph Algorithms:** Implements Breadth-First Search (BFS) for efficient, accurate pathfinding between nodes.
 -   **Interactive Graph Visualization:** A dynamic, canvas-based graph visualization that allows users to explore the network, with highlighting for paths and nodes.
 -   **Real-time AI Integration:** Connects to the OpenAI API to process user queries and generate responses.
+-   **@Mention Handling:** Queries may include names prefixed with `@`. These symbols are removed before
+    the AI analyzes the text so entity extraction works reliably.
 -   **Onboarding Assistance:** Provides users with clickable prompt suggestions to showcase the assistant's capabilities.
 -   **Modern, Type-Safe Codebase:** Built with TypeScript, Vite, and React, ensuring the code is robust, maintainable, and performant.
 

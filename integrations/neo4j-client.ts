@@ -87,7 +87,7 @@ async function getConnectionsFromNeo4j(): Promise<{ source: string; target: stri
        RETURN p1.id AS source, p2.id AS target, r.type AS type`
     );
 
-    return result.records.map(record => ({
+    return result.records.map((record: any) => ({
       source: record.get('source'),
       target: record.get('target'),
       type: record.get('type'),

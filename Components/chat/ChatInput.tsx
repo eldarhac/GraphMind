@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent, type ChangeEvent } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Mention } from '@/types/mentions';
@@ -158,7 +158,7 @@ export default function ChatInput({
             ref={inputRef}
             type="text"
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onClick={handleClick}
             placeholder=""
