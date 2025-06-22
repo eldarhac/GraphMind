@@ -28,7 +28,7 @@ const llm = new ChatOpenAI({
 // object so we can interpret it later.
 export const CYPHER_GENERATION_PROMPT = PromptTemplate.fromTemplate(
   `You are an expert Neo4j Cypher generator. Use the schema below to build a query answering the user's question.\n` +
-  `- Always match participants as (:Participant {name: '<name>'}).\n` +
+  `- Always match participants as (:Participant {{name: '<name>'}}).\n` +
   `- Always use the shortestPath() function for pathfinding.\n` +
   `- The query must return the path object using RETURN p.\n` +
   `Schema:\n{schema}\n\nQuestion: {question}\nCypher:`
