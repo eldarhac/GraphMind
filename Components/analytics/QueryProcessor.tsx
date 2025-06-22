@@ -1,120 +1,110 @@
 import { InvokeLLM } from '@/integrations/Core';
 import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
-import { processGraphQuery } from '@/integrations/graph-intelligence-agent';
+import { queryGraph } from '@/integrations/graph-qa';
 
 export default class QueryProcessor {
   static async processQuery(message: string, currentUser: Person, graphData: { nodes: Person[], connections: Connection[] }) {
     const startTime = Date.now();
     
     try {
-      const lower = message.toLowerCase();
-
-      if (lower.includes('connected') || lower.includes('path') || lower.includes('similar')) {
-        const graphResponse = await processGraphQuery(message);
-        const processingTime = Date.now() - startTime;
-        return {
-          response: typeof graphResponse === 'string' ? graphResponse : JSON.stringify(graphResponse),
-          intent: 'graph',
-          graphAction: null,
-          processingTime
-        };
-      }
-
-      // Temporarily bypass the intent/graph logic to route directly to Text-to-SQL
-      const sqlResponse = await processTextToSqlQuery(message);
-
-      const processingTime = Date.now() - startTime;
-
-      return {
-        response: sqlResponse,
-        intent: "text_to_sql", // A new intent for our new flow
-        graphAction: null, // No graph action for now
-        processingTime
-      };
-
-      /*
-      // Step 1: Extract intent and entities from user message
-      const personNames = graphData.nodes.map(n => n.name);
-      const intentResult: IntentData = await InvokeLLM({
-        prompt: `
-          Analyze this user query for a graph-based network assistant: "${message}"
-          
-          The user asking the question is "${currentUser.name}".
-          If the intent is 'find_path' and only one person is mentioned, assume the path is from the current user to that person.
-
-          Here is a list of all the people in the network:
-          - ${personNames.join('\n- ')}
-
-          Your task:
-          1.  Determine the user's intent (e.g., find_path).
-          2.  Extract the entities (person names, topics) from the query.
-          3.  **Crucially, fuzzy match the extracted person names against the provided list of people. If you find a close match, use the exact name from the list.** For example, if the user says "Dr. Marcus Smith" and "Dr. Marcus Thorne" is in the list, you MUST return "Dr. Marcus Thorne" in the entities array.
-          
-          Return the corrected entities in the final JSON output.
-          
-          Extract the following information:
-          - intent: one of [find_path, rank_nodes, recommend_person, find_similar, find_bridge, general]
-          - entities: relevant person names (corrected against the list), topics, or other key entities mentioned
-          - parameters: any specific constraints or preferences
-          
-          Current user context: The user is exploring a professional network graph.
-          
-          Return structured data to help query the graph database.
-        `,
+      // --- Intent Classification Router ---
+      const routerResult = await InvokeLLM({
+        prompt: `Based on the user's question, classify the intent.\n- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.\n- If the question is about facts, lists, attributes, or aggregates (like 'who works at X' or 'count all Y'), respond with {"intent": "relational_query"}.\n\nUser Question: "${message}"`,
         response_json_schema: {
           type: "object",
           properties: {
             intent: {
               type: "string",
-              enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "general"]
-            },
-            entities: {
-              type: "array",
-              items: { type: "string" }
-            },
-            parameters: {
-              type: "object",
-              properties: {
-                target_person: { type: "string" },
-                topic: { type: "string" },
-                limit: { type: "number" },
-                connection_type: { type: "string" }
-              }
-            },
-            confidence: { type: "number" }
+              enum: ["graph_query", "relational_query"]
+            }
           }
         }
       });
 
-      // Step 2: Execute graph query based on intent
-      const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
+      const classifiedIntent = (routerResult as any).intent || 'relational_query';
 
-      // Step 3: Generate natural language response
-      const response = await InvokeLLM({
-        prompt: `
-          Based on this graph query result, generate a helpful and conversational response:
-          
-          User Query: "${message}"
-          Intent: ${intentResult.intent}
-          Graph Results: ${JSON.stringify(graphResults, null, 2)}
-          
-          Provide a clear, engaging response that explains the findings in natural language.
-          Be specific about the connections, people, and insights discovered.
-          
-          Keep the response concise but informative.
-        `
-      });
+      if (classifiedIntent === 'graph_query') {
+        // Step 1: Extract intent and entities from user message
+        const personNames = graphData.nodes.map(n => n.name);
+        const intentResult: IntentData = await InvokeLLM({
+          prompt: `
+            Analyze this user query for a graph-based network assistant: "${message}"
 
-      const processingTime = Date.now() - startTime;
+            The user asking the question is "${currentUser.name}".
+            If the intent is 'find_path' and only one person is mentioned, assume the path is from the current user to that person.
 
-      return {
-        response: response,
-        intent: intentResult.intent,
-        graphAction: this.generateGraphAction(intentResult, graphResults),
-        processingTime
-      };
-      */
+            Here is a list of all the people in the network:
+            - ${personNames.join('\n- ')}
+
+            Your task:
+            1.  Determine the user's intent (e.g., find_path).
+            2.  Extract the entities (person names, topics) from the query.
+            3.  **Crucially, fuzzy match the extracted person names against the provided list of people. If you find a close match, use the exact name from the list.** For example, if the user says "Dr. Marcus Smith" and "Dr. Marcus Thorne" is in the list, you MUST return "Dr. Marcus Thorne" in the entities array.
+
+            Return the corrected entities in the final JSON output.
+
+            Extract the following information:
+            - intent: one of [find_path, rank_nodes, recommend_person, find_similar, find_bridge, general]
+            - entities: relevant person names (corrected against the list), topics, or other key entities mentioned
+            - parameters: any specific constraints or preferences
+
+            Current user context: The user is exploring a professional network graph.
+
+            Return structured data to help query the graph database.
+          `,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              intent: {
+                type: "string",
+                enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "general"]
+              },
+              entities: {
+                type: "array",
+                items: { type: "string" }
+              },
+              parameters: {
+                type: "object",
+                properties: {
+                  target_person: { type: "string" },
+                  topic: { type: "string" },
+                  limit: { type: "number" },
+                  connection_type: { type: "string" }
+                }
+              },
+              confidence: { type: "number" }
+            }
+          }
+        });
+
+        // Step 2: Execute graph query based on intent
+        const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
+
+        // Step 3: Generate natural language response
+        const response = await queryGraph({ query: message });
+
+        const processingTime = Date.now() - startTime;
+
+        return {
+          response: typeof response === 'string' ? response : JSON.stringify(response),
+          intent: intentResult.intent,
+          graphAction: this.generateGraphAction(intentResult, graphResults),
+          processingTime
+        };
+      } else {
+        const sqlResponse = await processTextToSqlQuery(message);
+
+        const processingTime = Date.now() - startTime;
+
+        return {
+          response: sqlResponse,
+          intent: "text_to_sql",
+          graphAction: null,
+          processingTime
+        };
+      }
+
     } catch (error) {
       console.error('Query processing error:', error);
       return {
