@@ -83,11 +83,14 @@ export default class QueryProcessor {
 
         // Step 3: Generate natural language response
         const response = await queryGraph({ query: message });
+        const finalText = typeof response === 'object' && response !== null && 'result' in response
+          ? (response as any).result
+          : (typeof response === 'string' ? response : JSON.stringify(response));
 
         const processingTime = Date.now() - startTime;
 
         return {
-          response: typeof response === 'string' ? response : JSON.stringify(response),
+          response: finalText,
           intent: intentResult.intent,
           graphAction: this.generateGraphAction(intentResult, graphResults),
           processingTime
