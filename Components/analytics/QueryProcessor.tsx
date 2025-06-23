@@ -62,6 +62,25 @@ ${contextualMessage}`,
             2.  Extract the entities (person names, topics) from the query, considering chat history context.
             3.  **Crucially, fuzzy match the extracted person names against the provided list of people. If you find a close match, use the exact name from the list.** For example, if the user says "Dr. Marcus Smith" and "Dr. Marcus Thorne" is in the list, you MUST return "Dr. Marcus Thorne" in the entities array.
 
+            From the user's query, extract the full names of all participants mentioned. Participant names will be proper nouns.
+
+            Examples:
+            Query: "Find Misty Salinas"
+            Result: {"entities": ["Misty Salinas"]}
+
+            Query: "Can you please highlight @Cheryl Spears and Pamela Mayer for me?"
+            Result: {"entities": ["Cheryl Spears", "Pamela Mayer"]}
+
+            Query: "where is dr. scott harris"
+            Result: {"entities": ["Dr. Scott Harris"]}
+
+            Query: "Show me everyone"
+            Result: {"entities": []}
+
+            ---
+            User Query: "${message}"
+            Result:
+
             Return the corrected entities in the final JSON output.
 
             Extract the following information:
@@ -111,7 +130,7 @@ ${contextualMessage}`,
         if (intentResult.intent === 'select_node' && (!intentResult.entities || intentResult.entities.length === 0)) {
           console.error('[DEBUG 4] No people identified for select_node intent.');
           return {
-            response: "I couldn't identify the person or people you want to highlight. Please try again using their full names or '@' mentions.",
+            response: "I couldn't identify a specific person's name in your request. Please try again.",
             intent: 'error',
             graphAction: null,
             processingTime: Date.now() - startTime
@@ -136,7 +155,8 @@ ${contextualMessage}`,
           response: finalText,
           intent: intentResult.intent,
           graphAction: this.generateGraphAction(intentResult, graphResults),
-          processingTime
+          processingTime,
+          entities: intentResult.entities
         };
       } else if (classifiedIntent === 'knowledge_base_qa') {
         const qaResponse = await answerQuestionAboutPerson(message);
@@ -145,10 +165,11 @@ ${contextualMessage}`,
           response: qaResponse,
           intent: "knowledge_base_qa",
           graphAction: null,
-          processingTime
+          processingTime,
+          entities: []
         };
       } else {
-        const sqlResponse = await processTextToSqlQuery(cleanedMessage);
+        const sqlResponse = await processTextToSqlQuery(message);
 
         const processingTime = Date.now() - startTime;
 
@@ -156,7 +177,8 @@ ${contextualMessage}`,
           response: sqlResponse,
           intent: "text_to_sql",
           graphAction: null,
-          processingTime
+          processingTime,
+          entities: []
         };
       }
 
@@ -166,7 +188,8 @@ ${contextualMessage}`,
         response: "I encountered an issue processing your query. Could you please rephrase or try a different question?",
         intent: "general",
         graphAction: null,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
+        entities: []
       };
     }
   }
@@ -366,8 +389,10 @@ ${contextualMessage}`,
   }
 
   static selectNodes(entities: string[], nodes: Person[]): SelectNodeResult {
-    const normalized = entities.map(e => e.toLowerCase());
-    const matched = nodes.filter(n => normalized.includes(n.name.toLowerCase()));
+    const normalized = entities.map(e => e.toLowerCase().trim());
+    const matched = nodes.filter(n =>
+      normalized.some(ent => n.name.toLowerCase().includes(ent))
+    );
     return { nodes: matched };
   }
 

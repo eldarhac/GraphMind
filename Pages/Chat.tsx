@@ -99,10 +99,19 @@ Click on any person in the graph to mention them in your message!`,
         messages
       );
 
-      // Create assistant response
+      let assistantText = result.response;
+      if (
+        result.intent === 'select_node' &&
+        result.entities &&
+        result.entities.length > 0 &&
+        (!result.graphAction || !result.graphAction.node_ids || result.graphAction.node_ids.length === 0)
+      ) {
+        assistantText = `I've searched the network, but I could not find anyone matching the name '${result.entities.join(', ')}'.`;
+      }
+
       const assistantMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        message: result.response,
+        message: assistantText,
         sender: 'assistant',
         timestamp: new Date(),
         query_type: result.intent,
