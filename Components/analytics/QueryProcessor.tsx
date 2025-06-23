@@ -20,28 +20,40 @@ export default class QueryProcessor {
         message;
 
       // --- Intent Classification Router ---
-      const routerResult = await InvokeLLM({
-        prompt: `Based on the user's question and chat history, classify the intent.
-- If the question is about paths, connections, relationships, or how people are linked, respond with {"intent": "graph_query"}.
-- If the question is a general knowledge question about a person, their experience, or facts that might be stored in a document or profile (e.g., "Who worked at Google?", "Tell me about Dr. Smith's research"), respond with {"intent": "knowledge_base_qa"}.
-- If the question is about specific facts, lists, or aggregates that require a precise database query (like 'who works at X and Y' or 'count all Y'), respond with {"intent": "relational_query"}.
+      const routerPrompt = `
+        You are an expert intent classification agent for a network graph application. Your task is to classify the user's query into one of the following categories: 'select_node', 'find_path', or 'relational_query'.
 
-Chat History and Current Question:
-${contextualMessage}`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            intent: {
-              type: "string",
-              enum: ["graph_query", "knowledge_base_qa", "relational_query"]
-            }
-          }
-        }
-      });
+        **INTENT DEFINITIONS:**
+        - 'select_node': Use for any request to find, show, highlight, or locate one or more specific participants on the graph.
+        - 'find_path': Use for any request about the connection, path, or relationship between two specific participants.
+        - 'relational_query': Use for questions that require querying factual data, like asking for lists or counts (e.g., 'who works at X?').
 
-      const classifiedIntent = (routerResult as any).intent || 'knowledge_base_qa';
+        **EXAMPLES:**
+        Query: "How is Pamela Mayer and Cheryl Spears related?" -> "find_path"
+        Query: "Show me Mark Chandler" -> "select_node"
+        Query: "Can you highlight @Nicholas Walker for me?" -> "select_node"
+        Query: "Where is Misty Salinas?" -> "select_node"
+        Query: "List all participants from the University of Texas" -> "relational_query"
+        Query: "count how many people work at Google" -> "relational_query"
 
-      if (classifiedIntent === 'graph_query') {
+        ---
+        Based on these definitions and examples, classify the following user query.
+        User Query: "${message}"
+
+        Respond with ONLY the string for the intent.
+      `;
+
+      const routerResult = await InvokeLLM({ prompt: routerPrompt });
+
+      let classifiedIntent = String(routerResult)
+        .toLowerCase()
+        .replace(/["'\n]/g, '')
+        .trim();
+      if (!['select_node', 'find_path', 'relational_query'].includes(classifiedIntent)) {
+        classifiedIntent = 'knowledge_base_qa';
+      }
+
+      if (classifiedIntent === 'select_node' || classifiedIntent === 'find_path') {
         // Step 1: Extract intent and entities from user message with chat context
         const personNames = graphData.nodes.map(n => n.name);
         const intentResult: IntentData = await InvokeLLM({
@@ -168,7 +180,7 @@ ${contextualMessage}`,
           processingTime,
           entities: []
         };
-      } else {
+      } else if (classifiedIntent === 'relational_query') {
         const sqlResponse = await processTextToSqlQuery(message);
 
         const processingTime = Date.now() - startTime;
@@ -176,6 +188,16 @@ ${contextualMessage}`,
         return {
           response: sqlResponse,
           intent: "text_to_sql",
+          graphAction: null,
+          processingTime,
+          entities: []
+        };
+      } else {
+        const qaResponse = await answerQuestionAboutPerson(message);
+        const processingTime = Date.now() - startTime;
+        return {
+          response: qaResponse,
+          intent: "knowledge_base_qa",
           graphAction: null,
           processingTime,
           entities: []
