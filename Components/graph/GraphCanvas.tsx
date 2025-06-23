@@ -26,15 +26,15 @@ type GraphLink = LinkObject & Connection & {
 interface GraphCanvasProps {
   nodes: Person[];
   connections: Connection[];
-  highlightedNodes?: string[];
+  highlightedNodeIds?: string[];
   highlightedConnections?: string[];
   onNodeClick?: (nodeId: string) => void;
 }
 
-export default function GraphCanvas({ 
-  nodes = [], 
-  connections = [], 
-  highlightedNodes = [], 
+export default function GraphCanvas({
+  nodes = [],
+  connections = [],
+  highlightedNodeIds = [],
   highlightedConnections = [],
   onNodeClick,
 }: GraphCanvasProps) {
@@ -83,7 +83,7 @@ export default function GraphCanvas({
     const graphNodes: GraphNode[] = nodes.map(p => ({
       ...p,
       id: p.id,
-      isHighlighted: highlightedNodes.includes(p.id),
+      isHighlighted: highlightedNodeIds.includes(p.id),
       avatarImg: avatarImages[p.id],
     }));
 
@@ -102,7 +102,7 @@ export default function GraphCanvas({
     }));
 
     return { nodes: graphNodes, links: graphLinks };
-  }, [nodes, connections, highlightedNodes, highlightedConnections, avatarImages]);
+  }, [nodes, connections, highlightedNodeIds, highlightedConnections, avatarImages]);
   
   useEffect(() => {
     if (fgRef.current) {
@@ -127,24 +127,38 @@ export default function GraphCanvas({
     const graphNode = node as GraphNode;
     const { x, y, name, isHighlighted, avatarImg } = graphNode;
     const baseRadius = 5;
-    const radius = isHighlighted ? baseRadius * 1.5 : baseRadius;
+    const radius = isHighlighted ? baseRadius * 1.8 : baseRadius;
     const label = name || '';
 
     // Draw Node Circle
     ctx.beginPath();
     ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = isHighlighted ? '#3B82F6' : '#334155';
+    if (isHighlighted) {
+      ctx.fillStyle = '#3B82F6';
+      ctx.shadowColor = '#60A5FA';
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 2;
+    } else {
+      ctx.fillStyle = 'rgba(51,65,85,0.5)';
+    }
     ctx.fill();
+    if (isHighlighted) {
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
 
     // Draw avatar image
     if (avatarImg && avatarImg.complete && avatarImg.naturalWidth > 0) {
-          ctx.save();
-          ctx.beginPath();
-        ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
-          ctx.clip();
-        ctx.drawImage(avatarImg, x! - radius, y! - radius, radius * 2, radius * 2);
-          ctx.restore();
-        } else {
+      ctx.save();
+      ctx.globalAlpha = isHighlighted ? 1 : 0.6;
+      ctx.beginPath();
+      ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
+      ctx.clip();
+      ctx.drawImage(avatarImg, x! - radius, y! - radius, radius * 2, radius * 2);
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    } else {
         // Fallback to initials if no image
         const initials = name?.split(/\s+/).map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) || '';
         const fontSize = radius;

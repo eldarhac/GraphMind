@@ -45,7 +45,7 @@ export interface ChatMessage {
 }
 
 export interface IntentData {
-    intent: 'find_path' | 'rank_nodes' | 'recommend_person' | 'find_similar' | 'find_bridge' | 'general';
+    intent: 'find_path' | 'rank_nodes' | 'recommend_person' | 'find_similar' | 'find_bridge' | 'select_node' | 'general';
     entities: string[];
     parameters: {
         target_person?: string;
@@ -68,10 +68,11 @@ export type RankNodesResult = { ranked_nodes: Person[]; topic: string; total_ana
 export type RecommendPersonsResult = { recommendations: Person[]; reasoning:string; };
 export type FindSimilarResult = { similar: Person[]; target: Person | undefined; };
 export type FindBridgeResult = { bridges: Person[]; };
+export type SelectNodeResult = { nodes: Person[] };
 export type GeneralResult = { nodes: [], connections: [], insights: [] };
 
 // Union of all possible graph query results
-export type GraphResults = FindPathResult | RankNodesResult | RecommendPersonsResult | FindSimilarResult | FindBridgeResult | GeneralResult;
+export type GraphResults = FindPathResult | RankNodesResult | RecommendPersonsResult | FindSimilarResult | FindBridgeResult | SelectNodeResult | GeneralResult;
 
 class BaseModel {
     static list(): Promise<any[]> {

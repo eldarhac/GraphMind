@@ -160,7 +160,7 @@ export default function NetworkPage() {
           <GraphCanvas
             nodes={filteredData.nodes}
             connections={filteredData.connections}
-            highlightedNodes={selectedNode ? [selectedNode.id] : []}
+            highlightedNodeIds={selectedNode ? [selectedNode.id] : []}
             onNodeClick={handleNodeClick}
           />
         </div>
