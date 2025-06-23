@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent, type ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Mention } from '@/types/mentions';
