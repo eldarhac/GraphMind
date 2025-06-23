@@ -1,5 +1,5 @@
 import { InvokeLLM } from '@/integrations/Core';
-import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, ChatMessage } from '@/Entities/all';
+import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
 
@@ -65,7 +65,7 @@ ${contextualMessage}`,
             Return the corrected entities in the final JSON output.
 
             Extract the following information:
-            - intent: one of [find_path, rank_nodes, recommend_person, find_similar, find_bridge, general]
+            - intent: one of [find_path, rank_nodes, recommend_person, find_similar, find_bridge, select_node, general]
             - entities: relevant person names (corrected against the list), topics, or other key entities mentioned
             - parameters: any specific constraints or preferences
 
@@ -78,7 +78,7 @@ ${contextualMessage}`,
             properties: {
               intent: {
                 type: "string",
-                enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "general"]
+                enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "select_node", "general"]
               },
               entities: {
                 type: "array",
@@ -99,10 +99,19 @@ ${contextualMessage}`,
         });
         console.log('[DEBUG 2] Extracted Entities:', JSON.stringify(intentResult, null, 2));
 
-        if (!intentResult.entities || intentResult.entities.length < 2) {
+        if (intentResult.intent === 'find_path' && (!intentResult.entities || intentResult.entities.length < 2)) {
           console.error('[DEBUG 4] Entity extraction failed or found less than 2 people.');
           return {
             response: "I couldn't identify two specific people in your request. Please try again using the '@' mention feature, for example: 'path between @Person A and @Person B'.",
+            intent: 'error',
+            graphAction: null,
+            processingTime: Date.now() - startTime
+          };
+        }
+        if (intentResult.intent === 'select_node' && (!intentResult.entities || intentResult.entities.length === 0)) {
+          console.error('[DEBUG 4] No people identified for select_node intent.');
+          return {
+            response: "I couldn't identify the person or people you want to highlight. Please try again using their full names or '@' mentions.",
             intent: 'error',
             graphAction: null,
             processingTime: Date.now() - startTime
@@ -202,6 +211,9 @@ ${contextualMessage}`,
       
       case 'find_bridge':
         return this.findBridge(parameters, nodes, connections);
+
+      case 'select_node':
+        return this.selectNodes(entities, nodes);
       
       default:
         return { nodes: [], connections: [], insights: [] };
@@ -353,6 +365,12 @@ ${contextualMessage}`,
     return { bridges };
   }
 
+  static selectNodes(entities: string[], nodes: Person[]): SelectNodeResult {
+    const normalized = entities.map(e => e.toLowerCase());
+    const matched = nodes.filter(n => normalized.includes(n.name.toLowerCase()));
+    return { nodes: matched };
+  }
+
   static generateGraphAction(intentData: IntentData, graphResults: GraphResults) {
     const { intent } = intentData;
 
@@ -394,6 +412,13 @@ ${contextualMessage}`,
         return {
           type: 'highlight_nodes',
           node_ids: bridgeResults.bridges?.map(n => n.id) || []
+        };
+
+      case 'select_node':
+        const selectResults = graphResults as SelectNodeResult;
+        return {
+          type: 'highlight_nodes',
+          node_ids: selectResults.nodes?.map(n => n.id) || []
         };
 
       case 'general':

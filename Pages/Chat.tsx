@@ -14,7 +14,7 @@ export default function ChatPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [graphData, setGraphData] = useState<{ nodes: Person[], connections: Connection[] }>({ nodes: [], connections: [] });
-  const [highlightedNodes, setHighlightedNodes] = useState<string[]>([]);
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<string[]>([]);
   const [highlightedConnections, setHighlightedConnections] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<Person | null>(null);
   const [graphPanelWidth, setGraphPanelWidth] = useState(50); // percentage
@@ -74,6 +74,11 @@ Click on any person in the graph to mention them in your message!`,
 
   const handleSendMessage = async (messageText: string) => {
     if (!messageText.trim() || !currentUser) return;
+
+    if (messageText.trim().toLowerCase() === 'clear highlights') {
+      clearHighlights();
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -138,13 +143,13 @@ Click on any person in the graph to mention them in your message!`,
     switch (action.type) {
       case 'highlight_path':
       case 'highlight_nodes':
-        setHighlightedNodes(action.node_ids || []);
+        setHighlightedNodeIds(action.node_ids || []);
         setHighlightedConnections(action.connection_ids || []);
         break;
       
       case 'zoom_to':
         // Zoom functionality would be implemented in GraphCanvas
-        setHighlightedNodes(action.node_ids || []);
+        setHighlightedNodeIds(action.node_ids || []);
         break;
       
       default:
@@ -153,7 +158,7 @@ Click on any person in the graph to mention them in your message!`,
   };
 
   const clearHighlights = () => {
-    setHighlightedNodes([]);
+    setHighlightedNodeIds([]);
     setHighlightedConnections([]);
   };
 
@@ -303,7 +308,7 @@ Click on any person in the graph to mention them in your message!`,
               <p className="text-sm text-slate-400">Click nodes to mention people</p>
             </div>
           </div>
-          {(highlightedNodes.length > 0 || highlightedConnections.length > 0) && (
+          {(highlightedNodeIds.length > 0 || highlightedConnections.length > 0) && (
             <button
               onClick={clearHighlights}
               className="px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200"
@@ -318,7 +323,7 @@ Click on any person in the graph to mention them in your message!`,
           <GraphCanvas
             nodes={graphData.nodes}
             connections={graphData.connections}
-            highlightedNodes={highlightedNodes}
+            highlightedNodeIds={highlightedNodeIds}
             highlightedConnections={highlightedConnections}
             onNodeClick={handleNodeClick}
           />
