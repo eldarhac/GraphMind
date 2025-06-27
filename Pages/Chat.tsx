@@ -166,6 +166,7 @@ Click on any person in the graph to mention them in your message!`,
       case 'zoom_to':
         // Zoom functionality would be implemented in GraphCanvas
         setHighlightedNodeIds(action.node_ids || []);
+        setHighlightedConnections([]);
         break;
       
       default:
@@ -178,7 +179,7 @@ Click on any person in the graph to mention them in your message!`,
     setHighlightedConnections([]);
   };
 
-  const handleNodeClick = (nodeId: string) => {
+  const handleNodeMention = (nodeId: string) => {
     const node = graphData.nodes.find(n => n.id === nodeId);
     if (node) {
       // Set pending mention to be inserted at cursor position
@@ -341,7 +342,7 @@ Click on any person in the graph to mention them in your message!`,
             connections={graphData.connections}
             highlightedNodeIds={highlightedNodeIds}
             highlightedConnections={highlightedConnections}
-            onNodeClick={handleNodeClick}
+            onMentionNode={handleNodeMention}
           />
         </div>
       </div>
