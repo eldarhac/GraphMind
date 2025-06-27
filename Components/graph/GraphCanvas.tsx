@@ -84,10 +84,10 @@ export default function GraphCanvas({
   const graphData = useMemo(() => {
     const graphNodes: GraphNode[] = nodes.map(p => {
       const node: GraphNode = {
-        ...p,
-        id: p.id,
-        isHighlighted: highlightedNodeIds.includes(p.id),
-        avatarImg: avatarImages[p.id],
+      ...p,
+      id: p.id,
+      isHighlighted: highlightedNodeIds.includes(p.id),
+      avatarImg: avatarImages[p.id],
       };
       if (p.id === CENTRAL_USER_ID) {
         node.fx = 0;

@@ -162,14 +162,21 @@ export default class QueryProcessor {
         // Step 2: Execute graph query based on intent
         const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
 
-        // Step 3: Generate natural language response with chat history context
-        const response = await queryGraph({ 
-          query: contextualMessage,
-          chatHistory: chatHistory 
-        });
-        const finalText = typeof response === 'object' && response !== null && 'result' in response
-          ? (response as any).result
-          : (typeof response === 'string' ? response : JSON.stringify(response));
+        let finalText = '';
+
+        if (intentResult.intent === 'find_path') {
+            const pathResult = graphResults as FindPathResult;
+            finalText = this.generatePathExplanation(pathResult, currentUser.name);
+        } else {
+            // Step 3: Generate natural language response with chat history context
+            const response = await queryGraph({
+              query: contextualMessage,
+              chatHistory: chatHistory
+            });
+            finalText = typeof response === 'object' && response !== null && 'result' in response
+              ? (response as any).result
+              : (typeof response === 'string' ? response : JSON.stringify(response));
+        }
 
         const processingTime = Date.now() - startTime;
 
@@ -285,6 +292,12 @@ export default class QueryProcessor {
       return { path: [], distance: 0, message: "I need two people's names to find a path. Please try again.", nodes: [], connections: [] };
     }
 
+    // Pre-filter data to ensure consistency
+    const nodeIds = new Set(nodes.map(n => n.id));
+    const validConnections = connections.filter(conn => 
+      nodeIds.has(conn.person_a_id) && nodeIds.has(conn.person_b_id)
+    );
+
     const startNodeName = validEntities[0];
     const endNodeName = validEntities[1];
 
@@ -309,13 +322,17 @@ export default class QueryProcessor {
         const pathNodes = path.map(id => nodes.find(n => n.id === id)).filter((n): n is Person => n !== undefined);
         const pathConnections: Connection[] = [];
         for (let i = 0; i < path.length - 1; i++) {
-          const conn = connections.find(c =>
+          const conn = validConnections.find(c =>
             (c.person_a_id === path[i] && c.person_b_id === path[i + 1]) ||
             (c.person_b_id === path[i] && c.person_a_id === path[i + 1])
           );
           if (conn) {
             pathConnections.push(conn);
           }
+        }
+        // Final consistency check
+        if (pathNodes.length !== path.length || pathConnections.length !== path.length - 1) {
+            return { path: [], distance: 0, message: "I found a path but the data was inconsistent. Please check your data source.", nodes: [], connections: [] };
         }
         return {
           path: path,
@@ -327,7 +344,7 @@ export default class QueryProcessor {
       }
 
       // Get neighbors
-      const neighbors = connections
+      const neighbors = validConnections
         .filter(c => c.person_a_id === currentId || c.person_b_id === currentId)
         .map(c => (c.person_a_id === currentId ? c.person_b_id : c.person_a_id));
       
@@ -482,5 +499,57 @@ export default class QueryProcessor {
       default:
         return null;
     }
+  }
+
+  private static generatePathExplanation(pathResult: FindPathResult, currentUserName: string): string {
+    const { nodes, connections } = pathResult;
+
+    if (!nodes || nodes.length < 2 || !connections || !connections.length) {
+        return "I couldn't find a path between the specified people.";
+    }
+
+    const startNode = nodes[0];
+    const endNode = nodes[nodes.length - 1];
+
+    if (!startNode || !endNode) {
+      console.error("Path explanation generator received invalid start or end node.");
+      return "I couldn't find a complete path between the specified people.";
+    }
+    
+    const explanationParts: string[] = [];
+
+    for (let i = 0; i < connections.length; i++) {
+        const conn = connections[i];
+        const personA = nodes[i];
+        const personB = nodes[i+1];
+
+        // Safety check to ensure both nodes exist
+        if (!personA || !personB) {
+            console.error(`Missing node data at step ${i} in path explanation`);
+            return "I found a path but encountered incomplete data. Please try your query again.";
+        }
+
+        const subject = (i === 0 && personA.name === currentUserName) ? "You" : personA.name;
+
+        let predicate = '';
+
+        if (conn.connection_type === 'WORK') {
+            const details = conn.notes ? conn.notes.replace(/working together at/i, 'at').trim() : '';
+            predicate = `worked with ${personB.name} ${details}`;
+        } else if (conn.connection_type === 'STUDY') {
+            const details = conn.notes ? conn.notes.replace(/studied at/i, 'at').trim() : '';
+            predicate = `studied with ${personB.name} ${details}`;
+        } else {
+            predicate = `are connected to ${personB.name}`;
+        }
+        
+        explanationParts.push(`${subject} ${predicate}.`);
+    }
+
+    const body = explanationParts.join('\n');
+    const header = `Here's how you're connected to ${endNode.name}:`;
+    const footer = `\n\nI've highlighted the full path on the graph.`;
+    
+    return `${header}\n\n${body}${footer}`;
   }
 }

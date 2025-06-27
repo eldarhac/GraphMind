@@ -28,7 +28,7 @@ export async function getHybridGraphData(): Promise<{ nodes: Person[]; connectio
     person_b_id: c.target,
     connection_type: c.type,
     strength: 1,
-    notes: '',
+    notes: c.details || '',
   }));
 
   return { nodes, connections };
