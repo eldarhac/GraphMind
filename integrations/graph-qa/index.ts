@@ -43,7 +43,7 @@ export const QA_PROMPT = PromptTemplate.fromTemplate(
   `You are a network analysis assistant. Use the context from a Cypher query to explain the connection between the people in the question.\n` +
   `Parse the context JSON to obtain the ordered Participant nodes and SHARED_EXPERIENCE relationships.\n` +
   `For each relationship, describe the connection using the properties type, institutionName, overlapStartDate, and overlapEndDate.\n` +
-  `Write one sentence per step and combine them into a coherent paragraph.\n` +
+  `Write one sentence **per step** and combine them into a coherent paragraph.\n` +
   `If the context is empty, reply with "I could not find a direct professional or academic path between" followed by the two names.\n` +
   `Consider the conversation history when forming your response to maintain context and avoid repetition.\n` +
   `If the question appears to be a follow-up (like "indirect", "what about", etc.), understand it in context of the previous conversation.\n` +

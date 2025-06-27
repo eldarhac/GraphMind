@@ -6,6 +6,8 @@ import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
 
+const CENTRAL_USER_ID = "eldar-refael-hacohen-58b4b018a";
+
 const CONNECTION_TYPE_COLOR: Record<string, string> = {
   WORK: '#FFC107',
   STUDY: '#F44336',
@@ -80,12 +82,19 @@ export default function GraphCanvas({
   }, [nodes]);
 
   const graphData = useMemo(() => {
-    const graphNodes: GraphNode[] = nodes.map(p => ({
-      ...p,
-      id: p.id,
-      isHighlighted: highlightedNodeIds.includes(p.id),
-      avatarImg: avatarImages[p.id],
-    }));
+    const graphNodes: GraphNode[] = nodes.map(p => {
+      const node: GraphNode = {
+        ...p,
+        id: p.id,
+        isHighlighted: highlightedNodeIds.includes(p.id),
+        avatarImg: avatarImages[p.id],
+      };
+      if (p.id === CENTRAL_USER_ID) {
+        node.fx = 0;
+        node.fy = 0;
+      }
+      return node;
+    });
 
     // Filter out connections that reference non-existent nodes
     const nodeIds = new Set(graphNodes.map(n => n.id));
@@ -106,10 +115,13 @@ export default function GraphCanvas({
   
   useEffect(() => {
     if (fgRef.current) {
-      fgRef.current.d3Force('link')?.distance(100);
-      fgRef.current.d3Force('charge')?.strength(-150);
+      fgRef.current.d3Force('link').distance((link: any) => {
+        const isConnectedToCenter = link.source.id === CENTRAL_USER_ID || link.target.id === CENTRAL_USER_ID;
+        return isConnectedToCenter ? 250 : 100;
+      });
+      fgRef.current.d3Force('charge').strength(-200);
     }
-  }, []);
+  }, [graphData]);
 
   const handleNodeClick = useCallback((node: NodeObject) => {
     const graphNode = node as GraphNode;
@@ -125,9 +137,11 @@ export default function GraphCanvas({
   
   const nodeCanvasObject = useCallback((node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const graphNode = node as GraphNode;
-    const { x, y, name, isHighlighted, avatarImg } = graphNode;
-    const baseRadius = 5;
-    const radius = isHighlighted ? baseRadius * 1.8 : baseRadius;
+    const { x, y, name, isHighlighted, avatarImg, id } = graphNode;
+
+    const isCentralNode = id === CENTRAL_USER_ID;
+    const baseRadius = isCentralNode ? 80 : 5;
+    const radius = isHighlighted ? baseRadius * 1.2 : baseRadius;
     const label = name || '';
 
     // Draw Node Circle
@@ -140,7 +154,7 @@ export default function GraphCanvas({
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 2;
     } else {
-      ctx.fillStyle = 'rgba(51,65,85,0.5)';
+      ctx.fillStyle = isCentralNode ? 'rgb(51, 65, 85)' : 'rgba(51,65,85,0.5)';
     }
     ctx.fill();
     if (isHighlighted) {
@@ -151,7 +165,7 @@ export default function GraphCanvas({
     // Draw avatar image
     if (avatarImg && avatarImg.complete && avatarImg.naturalWidth > 0) {
       ctx.save();
-      ctx.globalAlpha = isHighlighted ? 1 : 0.6;
+      ctx.globalAlpha = (isHighlighted || isCentralNode) ? 1 : 0.6;
       ctx.beginPath();
       ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
       ctx.clip();
@@ -224,6 +238,22 @@ export default function GraphCanvas({
     ctx.globalAlpha = 1;
   }, []);
 
+  const nodePointerAreaPaint = useCallback((node: NodeObject, color: string, ctx: CanvasRenderingContext2D) => {
+    const graphNode = node as GraphNode;
+    const { x, y, id } = graphNode;
+
+    if (x === undefined || y === undefined) return;
+
+    const isCentralNode = id === CENTRAL_USER_ID;
+    const baseRadius = isCentralNode ? 80 : 5;
+    const interactiveRadius = isCentralNode ? baseRadius * 1.5 : baseRadius;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, interactiveRadius, 0, 2 * Math.PI, false);
+    ctx.fill();
+  }, []);
+
   const resetView = () => {
     if (fgRef.current) {
         fgRef.current.zoomToFit(400, 100);
@@ -239,6 +269,7 @@ export default function GraphCanvas({
         graphData={graphData}
         backgroundColor="#0F172A"
         nodeCanvasObject={nodeCanvasObject}
+        nodePointerAreaPaint={nodePointerAreaPaint}
         linkCanvasObject={linkCanvasObject}
         linkCanvasObjectMode={() => "replace"}
         onNodeClick={handleNodeClick}

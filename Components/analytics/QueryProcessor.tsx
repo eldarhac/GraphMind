@@ -45,6 +45,8 @@ export default class QueryProcessor {
 
       const routerResult = await InvokeLLM({ prompt: routerPrompt });
 
+      console.log('[DEBUG 1] Router Result:', routerResult);
+
       let classifiedIntent = String(routerResult)
         .toLowerCase()
         .replace(/["'\n]/g, '')
@@ -64,7 +66,8 @@ export default class QueryProcessor {
             ${contextualMessage}
 
             The user asking the question is "${currentUser.name}".
-            If the intent is 'find_path' and only one person is mentioned, assume the path is from the current user to that person.
+            **VERY IMPORTANT**: When the user refers to themselves with "I", "me", "my", or "myself", you MUST use "${currentUser.name}" as the person they are referring to.
+            For "find_path" requests, if the user only mentions one other person, you MUST assume the path starts from "${currentUser.name}". In this scenario, the 'entities' array in your JSON output must contain two strings: ["${currentUser.name}", "the other person's name"].
 
             Here is a list of all the people in the network:
             - ${personNames.join('\n- ')}
@@ -129,6 +132,13 @@ export default class QueryProcessor {
           }
         });
         console.log('[DEBUG 2] Extracted Entities:', JSON.stringify(intentResult, null, 2));
+
+        if (intentResult.intent === 'find_path' && intentResult.entities && intentResult.entities.length === 1) {
+            // If only one entity is found for a path, assume it's between the current user and that entity.
+            if (intentResult.entities[0] !== currentUser.name) {
+                intentResult.entities.unshift(currentUser.name);
+            }
+        }
 
         if (intentResult.intent === 'find_path' && (!intentResult.entities || intentResult.entities.length < 2)) {
           console.error('[DEBUG 4] Entity extraction failed or found less than 2 people.');

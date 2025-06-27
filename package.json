@@ -13,6 +13,7 @@
     "@langchain/community": "^0.3.47",
     "@langchain/openai": "^0.5.14",
     "@supabase/supabase-js": "^2.50.0",
+    "d3-force": "^3.0.0",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.0.24",
     "langchain": "^0.3.29",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@stagewise-plugins/react": "^0.4.8",
     "@stagewise/toolbar-react": "^0.4.8",
+    "@types/d3-force": "^3.0.10",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",

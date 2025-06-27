@@ -37,7 +37,14 @@ export default function ChatPage() {
       const { nodes, connections } = await getHybridGraphData();
 
       setGraphData({ nodes, connections });
-      if (nodes.length > 0) {
+
+      // Find and set "Matthew Smith" as the current user
+      const matthewSmith = nodes.find(node => node.id === "eldar-refael-hacohen-58b4b018a" || node.name === "Matthew Smith");
+
+      if (matthewSmith) {
+        setCurrentUser(matthewSmith);
+      } else if (nodes.length > 0) {
+        console.warn("Matthew Smith not found, falling back to first user.");
         setCurrentUser(nodes[0]);
       }
     } catch (error) {
@@ -189,7 +196,7 @@ Click on any person in the graph to mention them in your message!`,
     setPendingMention(null);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: any) => {
     setIsResizing(true);
     e.preventDefault();
   };
