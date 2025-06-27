@@ -66,7 +66,7 @@ const NetworkDetailsCard: React.FC<NetworkDetailsCardProps> = ({
           className="w-full text-left flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors py-2 px-2 rounded-md hover:bg-slate-700/50"
         >
           <AtSign size={16} />
-          <span className="text-sm font-medium">@mention in chat</span>
+          <span className="text-sm font-medium">mention in chat</span>
         </button>
       </div>
 
