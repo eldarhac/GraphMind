@@ -61,18 +61,24 @@ IMPORTANT QUERYING RULES:
 2.  Your queries must be robust enough to handle cases where 'experience' or 'education' columns contain either a single JSON object or an array of JSON objects.
 3.  To handle this, you MUST use a combination of \`jsonb_typeof\` and \`jsonb_array_elements\` to safely query the JSON data.
 4.  Always cast the JSON columns to \`jsonb\` before using JSON functions (e.g., \`education::jsonb\`).
+5.  **To prevent errors on invalid data, before parsing a JSON column, add a WHERE clause to ensure its text representation starts with '{' or '['.**
 
 Example for querying the 'education' column for 'Ohio State University':
 \`\`\`sql
-SELECT * FROM participants2 WHERE
-EXISTS (
+SELECT * FROM participants2
+WHERE (education::text LIKE '{%' OR education::text LIKE '[%') AND EXISTS (
   SELECT 1
   FROM jsonb_array_elements(CASE WHEN jsonb_typeof(education::jsonb) = 'array' THEN education::jsonb ELSE jsonb_build_array(education::jsonb) END) AS edu
   WHERE edu->>'institution' ILIKE '%Ohio State University%'
 )
 \`\`\`
 
-This pattern correctly handles both single objects and arrays. Apply the same pattern for the 'experience' column.
+This pattern correctly handles both single objects and arrays, and filters out malformed data. Apply the same pattern for the 'experience' column.
+
+**VERY IMPORTANT SECURITY RULE:**
+- You are ONLY allowed to generate \`SELECT\` queries.
+- Under no circumstances should you generate any query that modifies the database, such as \`INSERT\`, \`UPDATE\`, \`DELETE\`, \`DROP\`, \`ALTER\`, etc.
+- If the user asks for a modification, you must still generate a \`SELECT\` query that might retrieve relevant information, or a query that returns nothing.
 
 Generate only the SQL query. Do not include any other text, explanation, or markdown.
 `;
@@ -113,9 +119,15 @@ Based ONLY on the provided data, please provide a concise and helpful natural-la
 
 export async function processTextToSqlQuery(question: string) {
   try {
+    const fullPrompt = `
+${SYSTEM_PROMPT}
+
+Based on the rules and schema described above, generate a single, valid PostgreSQL SELECT query to answer the following question:
+"${question}"
+    `;
+
     const generatedQuery: any = await InvokeLLM({
-      prompt: `Generate a SQL query for the following question: "${question}"`,
-      system_prompt: SYSTEM_PROMPT,
+      prompt: fullPrompt,
       use_cache: false,
     });
 
@@ -126,7 +138,7 @@ export async function processTextToSqlQuery(question: string) {
     console.log("SQL Execution Result:", result);
 
     if (result.error) {
-      return `Database error: ${result.error}`;
+      return `Database error: ${result.error}. The failing query was: \`${sqlQuery}\``;
     }
     if (result.data && result.data.length > 0) {
       return `I found the following people:\n\n${result.data.map((row: any) => `- ${row.name}`).join('\n')}`;

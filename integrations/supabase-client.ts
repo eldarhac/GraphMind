@@ -167,7 +167,7 @@ async function textToSql(question: string): Promise<any> {
 
 export async function executeSql(query: string) {
   try {
-    const { data, error } = await supabase.rpc('execute_sql', { query });
+    const { data, error } = await supabase.rpc('execute_sql', { sql_query: query });
     
     if (error) {
       console.error("Error executing SQL query via RPC:", error);
