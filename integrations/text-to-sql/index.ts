@@ -1,148 +1,87 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { supabaseClient } from "../supabase-client";
 import { InvokeLLM } from '../invoke-llm';
 import { executeSql } from '../supabase-client';
-// I'll assume the mcp_supabase_execute_sql tool can be imported and used here.
-// For now, this is a placeholder.
-// import { mcp_supabase_execute_sql } from "somewhere"; 
-
-// We need the schema to generate accurate queries.
-// This is a placeholder and should be fetched dynamically if possible.
-const DATABASE_SCHEMA = `
-Table: participants2
-Columns:
-- id: number
-- name: string
-- bio: string
-- embedding: vector
-- experience: jsonb
-- publications: jsonb
-- "linkedin-url": string
-- "github-url": string
-- "twitter-url": string
-- "scholar-url": string
-- affiliations: jsonb
-- current_project: string
-- office_hours: jsonb
-`;
-
-const llm = new ChatOpenAI({
-    openAIApiKey: import.meta.env.VITE_OPENAI_API_KEY,
-    modelName: 'gpt-4.1-mini',
-    temperature: 0,
-});
 
 const SYSTEM_PROMPT = `
-You are an expert at converting natural language questions into precise SQL queries for a PostgreSQL database.
+You are an expert at converting natural language questions into precise, single-line PostgreSQL queries.
 
-The user is querying a table named "participants2".
-
-Here is the relevant schema for the "participants2" table:
+The user is querying a table named "participants2". Here is the relevant schema:
 - id: uuid (Primary Key)
 - name: text
-- headline: text
-- location: text
-- summary: text
-- industry: text
-- experience: json (can be a single JSON object or an array of objects)
-- education: json (can be a single JSON object or an array of objects)
+- title: text
+- experience: jsonb (can contain an array of objects with a "company" key)
+- education: jsonb (can contain an array of objects with an "institution" key)
 
-Key fields within the 'experience' JSON objects:
-- "company": The name of the company.
-- "title": The job title.
-- "location": The location of the job.
+**CRITICAL RULES:**
+1.  **Always query the "participants2" table.**
+2.  **Your entire output must be a single, valid PostgreSQL SELECT query on a single line.** Do not use semicolons or newlines.
+3.  When a user asks "where" someone studied or worked, you MUST query the 'education' or 'experience' columns respectively.
+4.  To query inside the 'education' or 'experience' JSONB columns, you MUST use the \`jsonb_path_exists\` function. This is the only way to handle both single objects and arrays of objects safely.
 
-Key fields within the 'education'JSON objects:
-- "institution": The name of the institution (e.g., university).
-- "degree": The degree obtained.
+**EXAMPLE - How to find where a person studied:**
+User Question: "Where did Dennis Lee study?"
+Your SQL Query: SELECT education FROM participants2 WHERE name ILIKE '%Dennis Lee%'
 
-IMPORTANT QUERYING RULES:
-1.  Always query against the "participants2" table.
-2.  Your queries must be robust enough to handle cases where 'experience' or 'education' columns contain either a single JSON object or an array of JSON objects.
-3.  To handle this, you MUST use a combination of \`jsonb_typeof\` and \`jsonb_array_elements\` to safely query the JSON data.
-4.  Always cast the JSON columns to \`jsonb\` before using JSON functions (e.g., \`education::jsonb\`).
-5.  **To prevent errors on invalid data, before parsing a JSON column, add a WHERE clause to ensure its text representation starts with '{' or '['.**
+**EXAMPLE - How to find who worked at a company:**
+User Question: "Who worked at Google?"
+Your SQL Query: SELECT name, title FROM participants2 WHERE jsonb_path_exists(experience, '$[*] ? (@.company like_regex "Google" flag "i")')
 
-Example for querying the 'education' column for 'Ohio State University':
-\`\`\`sql
-SELECT * FROM participants2
-WHERE (education::text LIKE '{%' OR education::text LIKE '[%') AND EXISTS (
-  SELECT 1
-  FROM jsonb_array_elements(CASE WHEN jsonb_typeof(education::jsonb) = 'array' THEN education::jsonb ELSE jsonb_build_array(education::jsonb) END) AS edu
-  WHERE edu->>'institution' ILIKE '%Ohio State University%'
-)
-\`\`\`
-
-This pattern correctly handles both single objects and arrays, and filters out malformed data. Apply the same pattern for the 'experience' column.
-
-**VERY IMPORTANT SECURITY RULE:**
-- You are ONLY allowed to generate \`SELECT\` queries.
-- Under no circumstances should you generate any query that modifies the database, such as \`INSERT\`, \`UPDATE\`, \`DELETE\`, \`DROP\`, \`ALTER\`, etc.
-- If the user asks for a modification, you must still generate a \`SELECT\` query that might retrieve relevant information, or a query that returns nothing.
-
-Generate only the SQL query. Do not include any other text, explanation, or markdown.
+-   Based on these strict rules and examples, generate the SQL query for the user's question.
+-   Do NOT generate any query that modifies the database (INSERT, UPDATE, DELETE, etc.).
+-   **Output only the raw SQL query.**
 `;
-
-async function generateSqlQuery(question: string, schema: string): Promise<string> {
-  const prompt = `
-You are a PostgreSQL expert. Given the following database schema:
-\`\`\`
-${schema}
-\`\`\`
-
-Generate a single, valid PostgreSQL SELECT query to answer the following question:
-"${question}"
-
-- Only return the raw SQL query.
-- Do not add any commentary, explanation, or markdown formatting.
-  `;
-
-  const response = await llm.invoke(prompt);
-  return response.content.toString().trim(); 
-}
 
 async function generateFinalAnswer(question: string, sqlResult: any): Promise<string> {
     const prompt = `
-You are a helpful AI assistant. A user asked the following question:
+Based on the user's question and the data retrieved from the database, provide a concise and helpful natural-language answer.
+
+User Question:
 "${question}"
 
-To answer this, a SQL query was run against a database which returned the following JSON data:
+Database Result (JSON):
 \`\`\`json
 ${JSON.stringify(sqlResult, null, 2)}
 \`\`\`
 
-Based ONLY on the provided data, please provide a concise and helpful natural-language answer to the original question. If the data is empty, null, or contains an error, simply state that you could not find the information in the database. Do not invent information or say the query failed.
+- If the data is empty or contains an error, state that you could not find the information.
+- Otherwise, summarize the data to directly answer the question. For example, if the user asked where someone studied and the result is a JSON object with a list of schools, list them out.
+- Do not mention that you ran a SQL query. Just give the answer.
     `;
-    const response = await llm.invoke(prompt);
-    return response.content.toString().trim();
+    const response = await InvokeLLM({ prompt });
+    return String(response);
 }
 
 export async function processTextToSqlQuery(question: string) {
   try {
-    const fullPrompt = `
-${SYSTEM_PROMPT}
+    const fullPrompt = `${SYSTEM_PROMPT}\n\nUser Question: "${question}"`;
 
-Based on the rules and schema described above, generate a single, valid PostgreSQL SELECT query to answer the following question:
-"${question}"
-    `;
-
-    const generatedQuery: any = await InvokeLLM({
+    const generatedQuery = await InvokeLLM({
       prompt: fullPrompt,
       use_cache: false,
     });
 
-    const sqlQuery = generatedQuery.replace(/```sql\n|```/g, '').trim();
+    const sqlQuery = String(generatedQuery)
+      .replace(/```sql\n|```|;/g, '')
+      .trim();
+      
     console.log("Generated SQL Query:", sqlQuery);
+
+    if (!sqlQuery.toLowerCase().startsWith('select')) {
+      return "I can only process requests to view information. Please try again with a different question.";
+    }
 
     const result = await executeSql(sqlQuery);
     console.log("SQL Execution Result:", result);
 
     if (result.error) {
-      return `Database error: ${result.error}. The failing query was: \`${sqlQuery}\``;
+      return `Database error: ${result.error.message}. The failing query was: \`${sqlQuery}\``;
     }
+
     if (result.data && result.data.length > 0) {
-      return `I found the following people:\n\n${result.data.map((row: any) => `- ${row.name}`).join('\n')}`;
+      // Now, generate a final, user-friendly answer.
+      const finalAnswer = await generateFinalAnswer(question, result.data);
+      return finalAnswer;
     }
+    
     return "I could not find any information matching your query in the database.";
 
   } catch (error: any) {

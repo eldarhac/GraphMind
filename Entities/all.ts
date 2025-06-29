@@ -46,17 +46,18 @@ export interface ChatMessage {
   processing_time?: number;
 }
 
-export interface IntentData {
-    intent: 'find_path' | 'rank_nodes' | 'recommend_person' | 'find_similar' | 'find_bridge' | 'select_node' | 'general';
-    entities: string[];
-    parameters: {
-        target_person?: string;
-        topic?: string;
-        limit?: number;
-        connection_type?: string;
-    };
-    confidence?: number;
-}
+// Main type for intent classification from user query
+export type IntentData = {
+  intent: "find_path" | "rank_nodes" | "recommend_person" | "find_similar" | "find_bridge" | "select_node" | "general" | "find_potential_connections";
+  entities: string[];
+  parameters: {
+    target_person?: string;
+    topic?: string;
+    limit?: number;
+    connection_type?: string;
+  };
+  confidence?: number;
+};
 
 // Specific result types for each graph query function
 export type FindPathResult = {
@@ -68,13 +69,28 @@ export type FindPathResult = {
 };
 export type RankNodesResult = { ranked_nodes: Person[]; topic: string; total_analyzed: number; };
 export type RecommendPersonsResult = { recommendations: Person[]; reasoning:string; };
-export type FindSimilarResult = { similar: Person[]; target: Person | undefined; };
-export type FindBridgeResult = { bridges: Person[]; };
+export type FindSimilarResult = { similar: Person[]; target?: Person; message?: string; };
+export type FindBridgeResult = { bridges?: Person[]; };
 export type SelectNodeResult = { nodes: Person[] };
 export type GeneralResult = { nodes: [], connections: [], insights: [] };
 
+export interface FindPotentialConnectionsResult {
+  potential_connections: Person[];
+  target?: Person;
+  based_on?: Person[];
+  message?: string;
+}
+
 // Union of all possible graph query results
-export type GraphResults = FindPathResult | RankNodesResult | RecommendPersonsResult | FindSimilarResult | FindBridgeResult | SelectNodeResult | GeneralResult;
+export type GraphResults = 
+  | FindPathResult 
+  | RankNodesResult 
+  | RecommendPersonsResult 
+  | FindSimilarResult 
+  | FindBridgeResult 
+  | SelectNodeResult 
+  | GeneralResult
+  | FindPotentialConnectionsResult;
 
 class BaseModel {
     static list(): Promise<any[]> {

@@ -1,5 +1,5 @@
 import { InvokeLLM } from '@/integrations/Core';
-import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage } from '@/Entities/all';
+import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage, FindPotentialConnectionsResult } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
 import { supabaseClient } from '@/integrations/supabase-client';
@@ -32,9 +32,9 @@ export default class QueryProcessor {
         Query: "Who are the immediate connections of @Mitchell Alexander" -> "graph_query"
         Query: "Show me the path between Person A and Person B" -> "graph_query"
         Query: "How are these two people related?" -> "graph_query"
+        Query: "Find people similar to @Pamela Mayer" -> "graph_query" // Similarity is a graph operation using vector search
         Query: "List everyone who worked at Google" -> "relational_query"
         Query: "How many people studied at MIT?" -> "relational_query"
-        Query: "Find people similar to @Pamela Mayer" -> "relational_query"  // Note: Similarity is based on properties, so it's relational.
         Query: "Where did Justin Dougherty work in 2023?" -> "relational_query"
 
 
@@ -60,81 +60,66 @@ export default class QueryProcessor {
 
       if (classifiedIntent === 'graph_query') {
         // Step 1: Extract intent and entities from user message with chat context
-        const personNames = graphData.nodes.map(n => n.name);
+        
+        const intentResultSchema = {
+          type: "object",
+          properties: {
+            intent: {
+              type: "string",
+              enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "select_node", "find_potential_connections", "general"]
+            },
+            entities: {
+              type: "array",
+              items: { type: "string" }
+            },
+            parameters: {
+              type: "object",
+              properties: {
+                target_person: { type: "string" },
+                topic: { type: "string" },
+                limit: { type: "number" },
+                connection_type: { type: "string" }
+              }
+            },
+            confidence: { type: "number" }
+          },
+          required: ["intent", "entities", "parameters", "confidence"]
+        };
+
         const intentResult: IntentData = await InvokeLLM({
           prompt: `
-            Analyze this user query for a graph-based network assistant, considering the chat history for context.
+            You are a specialized API that converts natural language queries into structured JSON.
+            Your response MUST be a single, valid JSON object that strictly follows the JSON Schema provided below.
+            Do not include any text, explanations, or markdown formatting outside of the JSON object itself.
 
-            Chat History and Current Question:
+            **JSON Schema to Follow:**
+            \`\`\`json
+            ${JSON.stringify(intentResultSchema, null, 2)}
+            \`\`\`
+
+            **Context for the Query:**
+            - The query is from a user named: "${currentUser.name}".
+            - References to "I", "me", or "my" should be interpreted as "${currentUser.name}".
+            - For "find_path" intent, if only one person is named, the path is from "${currentUser.name}" to that person.
+            
+            **Conversation History:**
             ${contextualMessage}
 
-            The user asking the question is "${currentUser.name}".
-            **VERY IMPORTANT**: When the user refers to themselves with "I", "me", "my", or "myself", you MUST use "${currentUser.name}" as the person they are referring to.
-            For "find_path" requests, if the user only mentions one other person, you MUST assume the path starts from "${currentUser.name}". In this scenario, the 'entities' array in your JSON output must contain two strings: ["${currentUser.name}", "the other person's name"].
+            **User Query to Process:**
+            "${message}"
 
-            Here is a list of all the people in the network:
-            - ${personNames.join('\n- ')}
-
-            Your task:
-            1.  Determine the user's intent (e.g., find_path).
-            2.  Extract the entities (person names, topics) from the query, considering chat history context.
-            3.  **Crucially, fuzzy match the extracted person names against the provided list of people. If you find a close match, use the exact name from the list.** For example, if the user says "Dr. Marcus Smith" and "Dr. Marcus Thorne" is in the list, you MUST return "Dr. Marcus Thorne" in the entities array.
-
-            From the user's query, extract the full names of all participants mentioned. Participant names will be proper nouns.
-
-            Examples:
-            Query: "Find Misty Salinas"
-            Result: {"entities": ["Misty Salinas"]}
-
-            Query: "Can you please highlight @Cheryl Spears and Pamela Mayer for me?"
-            Result: {"entities": ["Cheryl Spears", "Pamela Mayer"]}
-
-            Query: "where is dr. scott harris"
-            Result: {"entities": ["Dr. Scott Harris"]}
-
-            Query: "Show me everyone"
-            Result: {"entities": []}
-
-            ---
-            User Query: "${message}"
-            Result:
-
-            Return the corrected entities in the final JSON output.
-
-            Extract the following information:
-            - intent: one of [find_path, rank_nodes, recommend_person, find_similar, find_bridge, select_node, general]
-            - entities: relevant person names (corrected against the list), topics, or other key entities mentioned
-            - parameters: any specific constraints or preferences
-
-            Current user context: The user is exploring a professional network graph.
-
-            Return structured data to help query the graph database.
+            **Your JSON Output:**
           `,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              intent: {
-                type: "string",
-                enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "select_node", "general"]
-              },
-              entities: {
-                type: "array",
-                items: { type: "string" }
-              },
-              parameters: {
-                type: "object",
-                properties: {
-                  target_person: { type: "string" },
-                  topic: { type: "string" },
-                  limit: { type: "number" },
-                  connection_type: { type: "string" }
-                }
-              },
-          confidence: { type: "number" }
-            }
-          }
+          response_json_schema: intentResultSchema
         });
         console.log('[DEBUG 2] Extracted Entities:', JSON.stringify(intentResult, null, 2));
+
+        // Sanitize entities to remove "@" prefix from mentions.
+        if (intentResult.entities && Array.isArray(intentResult.entities)) {
+          intentResult.entities = intentResult.entities.map(e =>
+            typeof e === 'string' ? e.replace(/^@/, '').trim() : e
+          );
+        }
 
         if (intentResult.intent === 'find_path' && intentResult.entities && intentResult.entities.length === 1) {
             // If only one entity is found for a path, assume it's between the current user and that entity.
@@ -170,6 +155,12 @@ export default class QueryProcessor {
         if (intentResult.intent === 'find_path') {
             const pathResult = graphResults as FindPathResult;
             finalText = this.generatePathExplanation(pathResult, currentUser.name);
+        } else if (intentResult.intent === 'find_similar') {
+            const similarResult = graphResults as FindSimilarResult;
+            finalText = this.generateSimilarExplanation(similarResult);
+        } else if (intentResult.intent === 'find_potential_connections') {
+            const potentialResult = graphResults as FindPotentialConnectionsResult;
+            finalText = this.generatePotentialConnectionsExplanation(potentialResult);
         } else {
             // Step 3: Generate natural language response with chat history context
             const response = await queryGraph({
@@ -201,7 +192,9 @@ export default class QueryProcessor {
           entities: []
         };
       } else if (classifiedIntent === 'relational_query') {
-        const sqlResponse = await processTextToSqlQuery(message);
+        // Preprocess message to remove mention tags (@) before SQL processing
+        const preprocessedMessage = message.replace(/@/g, '').trim();
+        const sqlResponse = await processTextToSqlQuery(preprocessedMessage);
 
         const processingTime = Date.now() - startTime;
 
@@ -271,7 +264,7 @@ export default class QueryProcessor {
         return this.recommendPersons(nodes, connections);
       
       case 'find_similar':
-        return this.findSimilar(entities, nodes, connections);
+        return await this.findSimilar(entities, nodes);
       
       case 'find_bridge':
         return this.findBridge(parameters, nodes, connections);
@@ -279,6 +272,9 @@ export default class QueryProcessor {
       case 'select_node':
         return this.selectNodes(entities, nodes);
       
+      case 'find_potential_connections':
+        return this.findPotentialConnections(entities, nodes, connections);
+
       default:
         return { nodes: [], connections: [], insights: [] };
     }
@@ -402,27 +398,39 @@ export default class QueryProcessor {
     };
   }
 
-  static findSimilar(entities: string[], nodes: Person[], connections: Connection[]): FindSimilarResult {
-    if (entities.length === 0) return { similar: [], target: undefined };
-    
-    const targetName = entities[0];
-    const targetNode = nodes.find(node => 
-      node.name.toLowerCase().includes(targetName.toLowerCase())
-    );
-
-    if (!targetNode) return { similar: [], target: undefined };
-
-    const similar = nodes
-      .filter(node => node.id !== targetNode.id)
-      .filter(node => {
-        const sharedTopics = node.expertise_areas?.filter(area =>
-          targetNode.expertise_areas?.includes(area)
-        )?.length || 0;
-        return sharedTopics > 0;
-      })
-      .slice(0, 5);
-
-    return { similar, target: targetNode };
+  static async findSimilar(entities: string[], nodes: Person[]): Promise<FindSimilarResult> {
+    if (!entities || entities.length === 0) {
+      return { similar: [], target: undefined, message: "Please specify a person to find similar profiles." };
+    }
+  
+    const targetName = entities[0].replace(/^@/, '');
+  
+    // Find the target person in the local graph data to get their ID.
+    const targetNode = nodes.find(node => node.name.toLowerCase() === targetName.toLowerCase());
+  
+    if (!targetNode) {
+      return { similar: [], target: undefined, message: `Could not find "${targetName}" in the network.` };
+    }
+  
+    try {
+      // Use the targetNode's ID to find similar people via Supabase embeddings.
+      const similarPeople = await supabaseClient.getSimilarParticipants(targetNode.id, 5);
+  
+      if (!similarPeople || similarPeople.length === 0) {
+        return { similar: [], target: targetNode, message: `I couldn't find anyone with a similar profile to ${targetName}.` };
+      }
+  
+      // The RPC returns full Person objects, so we can use them directly.
+      return { similar: similarPeople, target: targetNode };
+  
+    } catch (error) {
+      console.error("Error finding similar people via embeddings:", error);
+      return { 
+        similar: [], 
+        target: targetNode, 
+        message: "I encountered an error while searching for similar people. Please try again later." 
+      };
+    }
   }
 
   static findBridge(parameters: any, nodes: Person[], connections: Connection[]): FindBridgeResult {
@@ -497,6 +505,16 @@ export default class QueryProcessor {
           node_ids: selectResults.nodes?.map(n => n.id) || []
         };
 
+      case 'find_potential_connections':
+        const potentialResults = graphResults as FindPotentialConnectionsResult;
+        return {
+          type: 'highlight_nodes',
+          node_ids: [
+            ...(potentialResults.target ? [potentialResults.target.id] : []),
+            ...(potentialResults.potential_connections?.map(n => n.id) || [])
+          ]
+        };
+
       case 'general':
       default:
         return null;
@@ -554,6 +572,99 @@ export default class QueryProcessor {
     
     return `${header}\n\n${body}${footer}`;
   }
+
+  private static generateSimilarExplanation(similarResult: FindSimilarResult): string {
+    const { similar, target, message } = similarResult;
+
+    if (message) {
+      return message;
+    }
+
+    if (!target || !similar || similar.length === 0) {
+      return "I couldn't find any similar people for the specified person.";
+    }
+
+    const similarNames = similar.map(p => p.name).join(', ');
+    const response = `Based on their profile, here are some people similar to ${target.name}:\n\n- ${similarNames.replace(/, /g, '\n- ')}\n\nI've highlighted them on the graph for you.`;
+    
+    return response;
+  }
+
+  static async findPotentialConnections(entities: string[], nodes: Person[], connections: Connection[]): Promise<FindPotentialConnectionsResult> {
+    if (!entities || entities.length === 0) {
+      return { potential_connections: [], message: "Please specify a person to find potential connections for." };
+    }
+    const targetName = entities[0].replace(/^@/, '');
+    const targetNode = nodes.find(node => node.name.toLowerCase() === targetName.toLowerCase());
+
+    if (!targetNode) {
+      return { potential_connections: [], target: undefined, message: `Could not find "${targetName}" in the network.` };
+    }
+
+    // Find people similar to the target person.
+    const similarPeople = await supabaseClient.getSimilarParticipants(targetNode.id, 3); // Get top 3 similar people
+
+    if (!similarPeople || similarPeople.length === 0) {
+        return { potential_connections: [], target: targetNode, message: `I couldn't find anyone with a similar profile to ${targetName} to base recommendations on.` };
+    }
+    
+    // Get IDs of people already connected to the target person
+    const existingConnectionIds = new Set<string>();
+    connections.forEach(conn => {
+        if (conn.person_a_id === targetNode.id) existingConnectionIds.add(conn.person_b_id);
+        if (conn.person_b_id === targetNode.id) existingConnectionIds.add(conn.person_a_id);
+    });
+    existingConnectionIds.add(targetNode.id); // Can't recommend the person themselves
+
+    // Get IDs of the similar people
+    const similarPeopleIds = new Set(similarPeople.map(p => p.id));
+
+    // Find connections of similar people (2nd degree connections)
+    const potentialConnectionIds = new Set<string>();
+    connections.forEach(conn => {
+        let potentialId: string | null = null;
+        if (similarPeopleIds.has(conn.person_a_id)) {
+            potentialId = conn.person_b_id;
+        } else if (similarPeopleIds.has(conn.person_b_id)) {
+            potentialId = conn.person_a_id;
+        }
+
+        if (potentialId && !existingConnectionIds.has(potentialId) && !similarPeopleIds.has(potentialId)) {
+            potentialConnectionIds.add(potentialId);
+        }
+    });
+
+    // Get the full Person objects for the potential connections and limit it.
+    const potential_connections = nodes
+      .filter(node => potentialConnectionIds.has(node.id))
+      .slice(0, 5); // Limit to 5 recommendations
+
+    return {
+        potential_connections,
+        target: targetNode,
+        based_on: similarPeople
+    };
+  }
+
+  private static generatePotentialConnectionsExplanation(result: FindPotentialConnectionsResult): string {
+    const { potential_connections, target, based_on, message } = result;
+
+    if (message) {
+      return message;
+    }
+
+    if (!target || !potential_connections || potential_connections.length === 0) {
+      return `I couldn't find any potential new connections for ${target?.name || 'the selected person'}.`;
+    }
+
+    const basedOnNames = based_on?.map(p => p.name).join(', ');
+    const potentialNames = potential_connections.map(p => p.name).join(', ');
+
+    let response = `Based on people with similar profiles to ${target.name} (like ${basedOnNames}), you might want to connect with:\n\n- ${potentialNames.replace(/, /g, '\n- ')}`;
+    response += `\n\nThese individuals are connected to your lookalikes but not yet to you. I've highlighted them on the graph.`;
+
+    return response;
+  }
 }
 
 export async function generateBioSummary(personData: { name: string, experience: any[], education: any[] }): Promise<string> {
@@ -566,8 +677,19 @@ export async function generateBioSummary(personData: { name: string, experience:
     : 'No education data available.';
 
   const prompt = `
-    You are a professional biographer. Your task is to write a concise, one-paragraph summary of ${personData.name}'s career and academic history based ONLY on the data provided.
-    Write in a fluid, narrative style. Mention their most recent or significant role and their education. Do not just list the data.
+    You are a professional biographer. Your task is to write a concise, narrative summary (around 2-4 sentences) of ${personData.name}'s career and academic background, based ONLY on the data provided.
+
+    **CRITICAL INSTRUCTION:** Your response MUST start directly with the person's name or a description of their career. DO NOT include any introductory phrases like "Here is a summary..." or "This is a summary of...".
+
+    **Example of what NOT to do:**
+    "Here is a summary of Jane Doe's career: Jane Doe started..."
+
+    **Example of what TO do:**
+    "Jane Doe began her career at..."
+
+    **Further Instructions:**
+    1. Weave together their key professional roles and educational achievements into a short story.
+    2. You MUST mention the names of companies and educational institutions from the data.
 
     **Professional Experience:**
     ${experienceString}
@@ -575,7 +697,7 @@ export async function generateBioSummary(personData: { name: string, experience:
     **Education:**
     ${educationString}
 
-    **Generated Summary:**
+    **Generated Summary (2-4 sentences, narrative style, mentioning institutions, NO introduction):**
   `;
 
   try {

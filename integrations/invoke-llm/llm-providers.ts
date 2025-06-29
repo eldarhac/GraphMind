@@ -1,13 +1,16 @@
 import { callOpenAI } from './openai';
+import { callLlama } from './llama';
+import { llmProvider } from './config';
 
 // Mock adapters for different LLM providers.
 
-export type LLMProvider = "openai" | "gemini" | "claude";
+export type LLMProvider = "openai" | "gemini" | "claude" | "llama";
 
 const MOCK_LATENCY = {
   openai: 400,
   gemini: 500,
-  claude: 600
+  claude: 600,
+  llama: 450
 };
 
 function createMockResponse(prompt: string, provider: LLMProvider, schema?: any) {
@@ -30,6 +33,11 @@ function createMockResponse(prompt: string, provider: LLMProvider, schema?: any)
 export async function callProvider(prompt: string, provider: LLMProvider, schema?: any): Promise<any> {
   console.log(`[LLM Provider] Calling ${provider} with prompt...`);
   
+  // If the provider is LLaMA, use our custom service.
+  if (llmProvider === 'llama') {
+    return callLlama(prompt, schema);
+  }
+
   // If the provider is OpenAI, use the real service.
   if (provider === 'openai') {
     // The schema parameter is passed to ensure the OpenAI service knows

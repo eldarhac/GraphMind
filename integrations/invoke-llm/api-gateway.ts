@@ -1,5 +1,6 @@
 import { augmentPrompt } from './context-manager';
 import { callProvider, LLMProvider } from './llm-providers';
+import { llmProvider } from './config';
 
 // Mock API Gateway. In a real app, this would be a backend service.
 export async function routeRequest(params: {
@@ -26,8 +27,8 @@ export async function routeRequest(params: {
   );
 
   // 4. Mock Routing to an LLM provider
-  // Simple logic: if 'claude' is in prompt, use claude, otherwise default to openai.
-  const provider: LLMProvider = finalPrompt.toLowerCase().includes('claude') ? 'claude' : 'openai';
+  // Simple logic: if 'claude' is in prompt, use claude, otherwise default to the provider set in config.
+  const provider: LLMProvider = finalPrompt.toLowerCase().includes('claude') ? 'claude' : llmProvider;
   console.log(`[API Gateway] Routing to provider: ${provider}`);
   const rawResponse = await callProvider(finalPrompt, provider, params.response_json_schema);
 
