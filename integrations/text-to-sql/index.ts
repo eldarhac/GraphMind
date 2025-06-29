@@ -30,62 +30,92 @@ Your SQL Query: SELECT name, title FROM participants2 WHERE jsonb_path_exists(ex
 -   **Output only the raw SQL query.**
 `;
 
-async function generateFinalAnswer(question: string, sqlResult: any): Promise<string> {
+async function generateFinalAnswer(question: string, data: any[]): Promise<string> {
     const prompt = `
-Based on the user's question and the data retrieved from the database, provide a concise and helpful natural-language answer.
+        You are a helpful assistant. You have been given the result of a SQL query and the original question.
+        Your task is to synthesize a natural, user-friendly answer based on the data.
+        The data is an array of objects.
 
-User Question:
-"${question}"
+        **Original Question:**
+        "${question}"
 
-Database Result (JSON):
-\`\`\`json
-${JSON.stringify(sqlResult, null, 2)}
-\`\`\`
+        **Data from Database:**
+        ${JSON.stringify(data, null, 2)}
 
-- If the data is empty or contains an error, state that you could not find the information.
-- Otherwise, summarize the data to directly answer the question. For example, if the user asked where someone studied and the result is a JSON object with a list of schools, list them out.
-- Do not mention that you ran a SQL query. Just give the answer.
+        **Synthesized Answer:**
     `;
-    const response = await InvokeLLM({ prompt });
-    return String(response);
+
+    try {
+        const finalAnswer = await InvokeLLM({ prompt: prompt });
+        return String(finalAnswer);
+    } catch (error) {
+        console.error("Error generating final answer:", error);
+        return "I found the data, but I had trouble formulating a response.";
+    }
 }
 
-export async function processTextToSqlQuery(question: string) {
-  try {
-    const fullPrompt = `${SYSTEM_PROMPT}\n\nUser Question: "${question}"`;
+export async function processTextToSqlQuery(query: string): Promise<string> {
+    const tableSchema = `
+      Table: participants2
+      Columns:
+      - name: TEXT (The full name of the person)
+      - experience: TEXT (A string which can be NULL, empty, or contain a JSON array of job experiences, e.g., '[{"company": "Google", "title": "Software Engineer"}]')
 
-    const generatedQuery = await InvokeLLM({
-      prompt: fullPrompt,
-      use_cache: false,
-    });
+      To query the 'experience' column, you MUST first cast it to JSONB.
+      You MUST also filter out NULL or empty strings before casting to avoid errors.
+      For example, to find people who worked at a company, you MUST use a query structured like this:
+      SELECT name FROM participants2 WHERE experience IS NOT NULL AND experience != '' AND jsonb_path_exists(experience::jsonb, '$[*] ? (@.company like_regex "some-company" flag "i")')
+    `;
 
-    const sqlQuery = String(generatedQuery)
-      .replace(/```sql\n|```|;/g, '')
-      .trim();
-      
-    console.log("Generated SQL Query:", sqlQuery);
+    const prompt = `
+        You are an expert SQL generator. Your task is to convert a natural language query into a valid SQL query for a PostgreSQL database.
+        You MUST use the provided table schema and MUST NOT invent table or column names.
+        The query should be a single-line SQL statement.
 
-    if (!sqlQuery.toLowerCase().startsWith('select')) {
-      return "I can only process requests to view information. Please try again with a different question.";
+        **Schema & Instructions:**
+        ${tableSchema}
+
+        **User Query:**
+        "${query}"
+
+        **SQL Query:**
+    `;
+
+    try {
+        const rawResponse = await InvokeLLM({ prompt: prompt });
+
+        let sqlQuery = String(rawResponse);
+
+        // The LLM often wraps the SQL in a markdown block. Let's extract it.
+        // This regex handles both ```sql and ``` blocks.
+        const match = sqlQuery.match(/```(?:sql)?\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+            sqlQuery = match[1];
+        }
+
+        // Before executing, perform a basic safety check.
+        const normalizedQuery = sqlQuery.trim().toUpperCase();
+        if (!normalizedQuery.startsWith('SELECT')) {
+            return "I can only process SELECT queries for safety reasons.";
+        }
+
+        const finalQuery = sqlQuery.trim().replace(/;$/, '');
+        const results = await executeSql(finalQuery);
+
+        if (results.error) {
+            return `Database error: ${results.error.message}. The failing query was: \`${finalQuery}\``;
+        }
+
+        if (!results.data || results.data.length === 0) {
+            return "I could not find any information matching your query in the database.";
+        }
+
+        // Now, generate a final, user-friendly answer.
+        const finalAnswer = await generateFinalAnswer(query, results.data);
+        return finalAnswer;
+    } catch (error: any) {
+        console.error('Database error:', error.message);
+        const failingQuery = error.metadata?.query || 'the generated SQL';
+        return `Database error: ${error.message}. The failing query was: \`${failingQuery}\``;
     }
-
-    const result = await executeSql(sqlQuery);
-    console.log("SQL Execution Result:", result);
-
-    if (result.error) {
-      return `Database error: ${result.error.message}. The failing query was: \`${sqlQuery}\``;
-    }
-
-    if (result.data && result.data.length > 0) {
-      // Now, generate a final, user-friendly answer.
-      const finalAnswer = await generateFinalAnswer(question, result.data);
-      return finalAnswer;
-    }
-    
-    return "I could not find any information matching your query in the database.";
-
-  } catch (error: any) {
-    console.error("Error processing text-to-SQL:", error);
-    return "I'm sorry, I encountered an error while trying to query the database.";
-  }
 } 
