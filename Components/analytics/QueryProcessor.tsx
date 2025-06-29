@@ -1,5 +1,5 @@
 import { InvokeLLM } from '@/integrations/Core';
-import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage, FindPotentialConnectionsResult } from '@/Entities/all';
+import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage, FindPotentialConnectionsResult, ExplainSimilarityResult } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
 import { supabaseClient } from '@/integrations/supabase-client';
@@ -20,207 +20,206 @@ export default class QueryProcessor {
         `${chatContext}\n\nCurrent question: ${message}\n\nPlease answer the current question while considering the conversation history for context. If the current question refers to previous topics, use that context appropriately.` : 
         message;
 
-      // --- Intent Classification Router ---
-      const routerPrompt = `
-        You are an expert intent classification router for a network analysis application. Your task is to classify the user's query into one of two categories: 'graph_query' or 'relational_query'.
+      const tools = [
+        {
+          name: "answer_relational_question",
+          description: "Answers questions about factual attributes of participants, like their work history, education, or title. Use for queries like 'List everyone who worked at Google' or 'How many people studied at MIT?'.",
+          parameters: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "The natural language question to answer from the relational database." }
+            },
+            required: ["question"]
+          }
+        },
+        {
+          name: "answer_graph_question",
+          description: "Answers general questions about the network structure, relationships, or influential nodes. Use for 'Who is the most connected person in AI?' or 'Summarize the tech cluster'.",
+          parameters: {
+            type: "object",
+            properties: {
+              question: { type: "string", description: "The natural language question to answer from the graph." }
+            },
+            required: ["question"]
+          }
+        },
+        {
+          name: "find_path",
+          description: "Finds the shortest path between two people in the network. Use for 'Show me the path between Person A and Person B' or 'How am I connected to Person C?'.",
+          parameters: {
+            type: "object",
+            properties: {
+              person_a: { type: "string", description: "The name of the starting person. Can be 'me' or 'I' to refer to the current user." },
+              person_b: { type: "string", description: "The name of the ending person." }
+            },
+            required: ["person_a", "person_b"]
+          }
+        },
+        {
+          name: "find_similar_people",
+          description: "Finds people with similar profiles to a given person, based on their experience and education (using vector embeddings).",
+          parameters: {
+            type: "object",
+            properties: {
+              person_name: { type: "string", description: "The name of the person to find similar profiles for." }
+            },
+            required: ["person_name"]
+          }
+        },
+        {
+          name: "find_potential_connections",
+          description: "Recommends new people for a given person to connect with. It works by finding people similar to the target person and then suggesting their connections.",
+          parameters: {
+            type: "object",
+            properties: {
+              person_name: { type: "string", description: "The name of the person to find potential connections for. Can be 'me' or 'I'." }
+            },
+            required: ["person_name"]
+          }
+        },
+        {
+          name: "explain_similarity",
+          description: "Explains *why* two people are considered to have similar profiles by comparing their backgrounds.",
+          parameters: {
+            type: "object",
+            properties: {
+              person_a: { type: "string", description: "The name of the first person." },
+              person_b: { type: "string", description: "The name of the second person." }
+            },
+            required: ["person_a", "person_b"]
+          }
+        },
+        {
+          name: "select_person",
+          description: "Selects and highlights a person on the graph.",
+          parameters: {
+            type: "object",
+            properties: {
+              person_name: { type: "string", description: "The name of the person to select." }
+            },
+            required: ["person_name"]
+          }
+        }
+      ];
 
-        **INTENT DEFINITIONS:**
-        - 'graph_query': Use for ANY request about the STRUCTURE of the network. This includes questions about paths, connections, relationships, links, who is connected to whom, immediate connections, or how people are related.
-        - 'relational_query': Use ONLY for requests about the factual attributes of participants, such as finding lists of people based on their properties (like where they worked or studied), or asking for a count of people.
+      const agentPrompt = `
+        You are a highly intelligent network analysis agent. Your goal is to answer the user's question by choosing the best tool for the job.
+        You must respond with a JSON object containing the tool to use and the parameters to pass to it.
+        Your response MUST be only the JSON object, with no other text.
 
-        **CRITICAL EXAMPLES:**
-        Query: "Who are the immediate connections of @Mitchell Alexander" -> "graph_query"
-        Query: "Show me the path between Person A and Person B" -> "graph_query"
-        Query: "How are these two people related?" -> "graph_query"
-        Query: "Find people similar to @Pamela Mayer" -> "graph_query" // Similarity is a graph operation using vector search
-        Query: "List everyone who worked at Google" -> "relational_query"
-        Query: "How many people studied at MIT?" -> "relational_query"
-        Query: "Where did Justin Dougherty work in 2023?" -> "relational_query"
+        **Tools Available:**
+        ${JSON.stringify(tools, null, 2)}
 
+        **Critical Rules & Context:**
+        - The current user's name is "${currentUser.name}".
+        - You MUST ONLY replace pronouns like "me", "I", or "my" with "${currentUser.name}".
+        - If the user's query mentions specific names, you MUST use those exact names in the tool parameters. DO NOT substitute a person's name with the current user's name. For example, if the query is "compare Person X and Person Y", the parameters should be for "Person X" and "Person Y", not the current user.
+        - You have access to a graph of people and their connections, and a relational database with their profile details.
 
-        ---
-        Based on these strict definitions and examples, classify the following user query.
-        User Query: "${message}"
+        **Conversation History:**
+        ${chatContext}
 
-        Respond with ONLY the string for the intent.
+        **Current User Query:**
+        "${message}"
+
+        Based on the query, history, tools, and the critical rules, select the single most appropriate tool and its parameters.
+
+        **Example Response Format:**
+        {
+          "name": "tool_name",
+          "parameters": {
+            "param_name": "value"
+          }
+        }
+
+        **Your JSON Response:**
       `;
 
-      const routerResult = await InvokeLLM({ prompt: routerPrompt });
+      const toolSelection = await InvokeLLM({
+        prompt: agentPrompt,
+        // Assuming InvokeLLM can handle a more generic schema definition
+        // If not, we might need a wrapper to format this for the LLM
+      });
 
-      console.log('[DEBUG 1] Router Result:', routerResult);
+      // The LLM's response should be a JSON string that we need to parse.
+      const parsedSelection = typeof toolSelection === 'string' ? JSON.parse(toolSelection) : toolSelection;
 
-      let classifiedIntent = String(routerResult)
-        .toLowerCase()
-        .replace(/["'\n]/g, '')
-        .trim();
-      console.log('Detected intent:', classifiedIntent);
-      if (!['graph_query', 'relational_query'].includes(classifiedIntent)) {
-        classifiedIntent = 'knowledge_base_qa';
+      let { name: toolName, parameters: toolParams } = parsedSelection;
+
+      // Defensively parse parameters, as the LLM may return a schema-like object.
+      if (toolParams && toolParams.properties) {
+        const extractedParams: { [key:string]: any } = {};
+        for (const key in toolParams.properties) {
+          if (toolParams.properties[key] && toolParams.properties[key].hasOwnProperty('value')) {
+            extractedParams[key] = toolParams.properties[key].value;
+          }
+        }
+        toolParams = extractedParams;
       }
 
-      if (classifiedIntent === 'graph_query') {
-        // Step 1: Extract intent and entities from user message with chat context
-        
-        const intentResultSchema = {
-          type: "object",
-          properties: {
-            intent: {
-              type: "string",
-              enum: ["find_path", "rank_nodes", "recommend_person", "find_similar", "find_bridge", "select_node", "find_potential_connections", "general"]
-            },
-            entities: {
-              type: "array",
-              items: { type: "string" }
-            },
-            parameters: {
-              type: "object",
-              properties: {
-                target_person: { type: "string" },
-                topic: { type: "string" },
-                limit: { type: "number" },
-                connection_type: { type: "string" }
-              }
-            },
-            confidence: { type: "number" }
-          },
-          required: ["intent", "entities", "parameters", "confidence"]
-        };
-
-        const intentResult: IntentData = await InvokeLLM({
-          prompt: `
-            You are a specialized API that converts natural language queries into structured JSON.
-            Your response MUST be a single, valid JSON object that strictly follows the JSON Schema provided below.
-            Do not include any text, explanations, or markdown formatting outside of the JSON object itself.
-
-            **JSON Schema to Follow:**
-            \`\`\`json
-            ${JSON.stringify(intentResultSchema, null, 2)}
-            \`\`\`
-
-            **Context for the Query:**
-            - The query is from a user named: "${currentUser.name}".
-            - References to "I", "me", or "my" should be interpreted as "${currentUser.name}".
-            - For "find_path" intent, if only one person is named, the path is from "${currentUser.name}" to that person.
-            
-            **Conversation History:**
-            ${contextualMessage}
-
-            **User Query to Process:**
-            "${message}"
-
-            **Your JSON Output:**
-          `,
-          response_json_schema: intentResultSchema
-        });
-        console.log('[DEBUG 2] Extracted Entities:', JSON.stringify(intentResult, null, 2));
-
-        // Sanitize entities to remove "@" prefix from mentions.
-        if (intentResult.entities && Array.isArray(intentResult.entities)) {
-          intentResult.entities = intentResult.entities.map(e =>
-            typeof e === 'string' ? e.replace(/^@/, '').trim() : e
-          );
+      // Sanitize params that might refer to the current user
+      for (const key in toolParams) {
+        if (typeof toolParams[key] === 'string' && (toolParams[key].toLowerCase() === 'me' || toolParams[key].toLowerCase() === 'i')) {
+          toolParams[key] = currentUser.name;
         }
-
-        if (intentResult.intent === 'find_path' && intentResult.entities && intentResult.entities.length === 1) {
-            // If only one entity is found for a path, assume it's between the current user and that entity.
-            if (intentResult.entities[0] !== currentUser.name) {
-                intentResult.entities.unshift(currentUser.name);
-            }
-        }
-
-        if (intentResult.intent === 'find_path' && (!intentResult.entities || intentResult.entities.length < 2)) {
-          console.error('[DEBUG 4] Entity extraction failed or found less than 2 people.');
-          return {
-            response: "I couldn't identify two specific people in your request. Please try again using the '@' mention feature, for example: 'path between @Person A and @Person B'.",
-            intent: 'error',
-            graphAction: null,
-            processingTime: Date.now() - startTime
-          };
-        }
-        if (intentResult.intent === 'select_node' && (!intentResult.entities || intentResult.entities.length === 0)) {
-          console.error('[DEBUG 4] No people identified for select_node intent.');
-          return {
-            response: "I couldn't identify a specific person's name in your request. Please try again.",
-            intent: 'error',
-            graphAction: null,
-            processingTime: Date.now() - startTime
-          };
-        }
-
-        // Step 2: Execute graph query based on intent
-        const graphResults: GraphResults = await this.executeGraphQuery(intentResult, graphData);
-
-        let finalText = '';
-
-        if (intentResult.intent === 'find_path') {
-            const pathResult = graphResults as FindPathResult;
-            finalText = this.generatePathExplanation(pathResult, currentUser.name);
-        } else if (intentResult.intent === 'find_similar') {
-            const similarResult = graphResults as FindSimilarResult;
-            finalText = this.generateSimilarExplanation(similarResult);
-        } else if (intentResult.intent === 'find_potential_connections') {
-            const potentialResult = graphResults as FindPotentialConnectionsResult;
-            finalText = this.generatePotentialConnectionsExplanation(potentialResult);
-        } else {
-            // Step 3: Generate natural language response with chat history context
-            const response = await queryGraph({
-              query: contextualMessage,
-              chatHistory: chatHistory
-            });
-            finalText = typeof response === 'object' && response !== null && 'result' in response
-              ? (response as any).result
-              : (typeof response === 'string' ? response : JSON.stringify(response));
-        }
-
-        const processingTime = Date.now() - startTime;
-
-        return {
-          response: finalText,
-          intent: intentResult.intent,
-          graphAction: this.generateGraphAction(intentResult, graphResults),
-          processingTime,
-          entities: intentResult.entities
-        };
-      } else if (classifiedIntent === 'knowledge_base_qa') {
-        const qaResponse = await answerQuestionAboutPerson(message);
-        const processingTime = Date.now() - startTime;
-        return {
-          response: qaResponse,
-          intent: "knowledge_base_qa",
-          graphAction: null,
-          processingTime,
-          entities: []
-        };
-      } else if (classifiedIntent === 'relational_query') {
-        // Preprocess message to remove mention tags (@) before SQL processing
-        const preprocessedMessage = message.replace(/@/g, '').trim();
-        const sqlResponse = await processTextToSqlQuery(preprocessedMessage);
-
-        const processingTime = Date.now() - startTime;
-
-        return {
-          response: sqlResponse,
-          intent: "text_to_sql",
-          graphAction: null,
-          processingTime,
-          entities: []
-        };
-      } else {
-        // Fallback for any unhandled classifiedIntent, though the logic above should prevent this.
-        const qaResponse = await answerQuestionAboutPerson(message);
-        return {
-          response: qaResponse,
-          intent: 'knowledge_base_qa',
-          graphAction: null,
-          processingTime: Date.now() - startTime
-        };
       }
+      
+      let result: GraphResults;
+      let responseText: string;
+
+      // Step 2: Execute the selected tool
+      switch (toolName) {
+        case "answer_relational_question":
+          responseText = await processTextToSqlQuery(toolParams.question);
+          result = { nodes: [], connections: [], insights: [] }; // No graph action for now
+          break;
+        case "answer_graph_question":
+          responseText = await queryGraph({ query: toolParams.question, chatHistory });
+          result = { nodes: [], connections: [], insights: [] }; // No graph action for now
+          break;
+        case "find_path":
+          result = this.findPath([toolParams.person_a, toolParams.person_b], graphData.nodes, graphData.connections);
+          responseText = this.generatePathExplanation(result as FindPathResult, currentUser.name);
+          break;
+        case "find_similar_people":
+          result = await this.findSimilar([toolParams.person_name], graphData.nodes);
+          responseText = this.generateSimilarExplanation(result as FindSimilarResult);
+          break;
+        case "find_potential_connections":
+          result = await this.findPotentialConnections([toolParams.person_name], graphData.nodes, graphData.connections);
+          responseText = this.generatePotentialConnectionsExplanation(result as FindPotentialConnectionsResult);
+          break;
+        case "explain_similarity":
+          result = await this.explainSimilarity([toolParams.person_a, toolParams.person_b], graphData.nodes);
+          responseText = this.generateSimilarityExplanation(result as ExplainSimilarityResult);
+          break;
+        case "select_person":
+          result = this.selectNodes([toolParams.person_name], graphData.nodes);
+          const selectedNodes = (result as SelectNodeResult).nodes;
+          responseText = selectedNodes.length > 0
+            ? `I've highlighted ${selectedNodes.map(n => n.name).join(', ')} on the graph.`
+            : `I couldn't find anyone named '${toolParams.person_name}'.`;
+          break;
+        default:
+          responseText = "I'm not sure how to handle that request. Please try rephrasing.";
+          result = { nodes: [], connections: [], insights: [] };
+      }
+
+      const processingTime = Date.now() - startTime;
+      
+      return {
+        response: responseText,
+        intent: toolName, // We can use the tool name as the intent for logging/UI purposes
+        graphAction: this.generateGraphAction(toolName, result),
+        processingTime,
+        entities: Object.values(toolParams) // For context, though not used in the same way
+      };
 
     } catch (error: any) {
-      console.error('Error processing query:', error);
+      console.error('Error processing agentic query:', error);
       return {
-        response: "I encountered an issue processing your query. Could you please rephrase or try a different question?",
-        intent: "general",
+        response: "I encountered an issue processing your query with my new agent brain. Could you please rephrase?",
+        intent: "agent_error",
         graphAction: null,
         processingTime: Date.now() - startTime,
         entities: []
@@ -274,6 +273,9 @@ export default class QueryProcessor {
       
       case 'find_potential_connections':
         return this.findPotentialConnections(entities, nodes, connections);
+
+      case 'explain_similarity':
+        return this.explainSimilarity(entities, nodes);
 
       default:
         return { nodes: [], connections: [], insights: [] };
@@ -455,10 +457,8 @@ export default class QueryProcessor {
     return { nodes: matched };
   }
 
-  static generateGraphAction(intentData: IntentData, graphResults: GraphResults) {
-    const { intent } = intentData;
-
-    switch (intent) {
+  static generateGraphAction(toolName: string, graphResults: GraphResults) {
+    switch (toolName) {
       case 'find_path':
         const pathResults = graphResults as FindPathResult;
         return {
@@ -467,21 +467,7 @@ export default class QueryProcessor {
           connection_ids: pathResults.connections?.map(c => c.id) || []
         };
 
-      case 'rank_nodes':
-        const rankResults = graphResults as RankNodesResult;
-        return {
-          type: 'highlight_nodes',
-          node_ids: rankResults.ranked_nodes?.slice(0, 5).map(n => n.id) || []
-        };
-
-      case 'recommend_person':
-        const recResults = graphResults as RecommendPersonsResult;
-        return {
-          type: 'highlight_nodes',
-          node_ids: recResults.recommendations?.map(n => n.id) || []
-        };
-
-      case 'find_similar':
+      case 'find_similar_people':
         const similarResults = graphResults as FindSimilarResult;
         return {
           type: 'highlight_nodes',
@@ -490,21 +476,7 @@ export default class QueryProcessor {
             ...(similarResults.similar?.map(n => n.id) || [])
           ]
         };
-
-      case 'find_bridge':
-        const bridgeResults = graphResults as FindBridgeResult;
-        return {
-          type: 'highlight_nodes',
-          node_ids: bridgeResults.bridges?.map(n => n.id) || []
-        };
-
-      case 'select_node':
-        const selectResults = graphResults as SelectNodeResult;
-        return {
-          type: 'highlight_nodes',
-          node_ids: selectResults.nodes?.map(n => n.id) || []
-        };
-
+      
       case 'find_potential_connections':
         const potentialResults = graphResults as FindPotentialConnectionsResult;
         return {
@@ -515,7 +487,23 @@ export default class QueryProcessor {
           ]
         };
 
-      case 'general':
+      case 'explain_similarity':
+        const similarityResult = graphResults as ExplainSimilarityResult;
+        return {
+          type: 'highlight_nodes',
+          node_ids: [
+            ...(similarityResult.person_a ? [similarityResult.person_a.id] : []),
+            ...(similarityResult.person_b ? [similarityResult.person_b.id] : [])
+          ]
+        };
+
+      case 'select_person':
+        const selectResults = graphResults as SelectNodeResult;
+        return {
+          type: 'highlight_nodes',
+          node_ids: selectResults.nodes?.map(n => n.id) || []
+        };
+        
       default:
         return null;
     }
@@ -664,6 +652,101 @@ export default class QueryProcessor {
     response += `\n\nThese individuals are connected to your lookalikes but not yet to you. I've highlighted them on the graph.`;
 
     return response;
+  }
+
+  static async explainSimilarity(entities: string[], nodes: Person[]): Promise<ExplainSimilarityResult> {
+    if (!entities || entities.length < 2) {
+        return { explanation: "Please specify two people to compare their similarity." };
+    }
+
+    const personAName = entities[0].replace(/^@/, '');
+    const personBName = entities[1].replace(/^@/, '');
+
+    const personANode = nodes.find(node => node.name.toLowerCase() === personAName.toLowerCase());
+    const personBNode = nodes.find(node => node.name.toLowerCase() === personBName.toLowerCase());
+
+    if (!personANode) {
+        return { explanation: `Could not find "${personAName}" in the network.`, message: `Could not find "${personAName}" in the network.` };
+    }
+    if (!personBNode) {
+        return { explanation: `Could not find "${personBName}" in the network.`, message: `Could not find "${personBName}" in the network.` };
+    }
+
+    // Fetch full details from Supabase
+    const [personADetails, personBDetails] = await Promise.all([
+        supabaseClient.getParticipantById(personANode.id),
+        supabaseClient.getParticipantById(personBNode.id)
+    ]);
+
+    if (!personADetails || !personBDetails) {
+        return { explanation: "Could not retrieve full details for one or both individuals to compare.", message: "Could not retrieve full details for one or both individuals to compare." };
+    }
+
+    // Now, generate the explanation using an LLM.
+    const experienceStringA = Array.isArray(personADetails.experience)
+        ? personADetails.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
+        : 'No experience data available.';
+    const educationStringA = Array.isArray(personADetails.education)
+        ? personADetails.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
+        : 'No education data available.';
+
+    const experienceStringB = Array.isArray(personBDetails.experience)
+        ? personBDetails.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
+        : 'No experience data available.';
+    const educationStringB = Array.isArray(personBDetails.education)
+        ? personBDetails.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
+        : 'No education data available.';
+
+    const prompt = `
+        You are a professional analyst. Your task is to explain why ${personADetails.name} and ${personBDetails.name} have similar professional profiles, based ONLY on the data provided.
+        Your response MUST use their full names. Do NOT use placeholders like "Person A" or "Person B".
+
+        **Information for ${personADetails.name}**:
+        Title: ${personADetails.title}
+        Experience:
+        ${experienceStringA}
+        Education:
+        ${educationStringA}
+
+        **Information for ${personBDetails.name}**:
+        Title: ${personBDetails.title}
+        Experience:
+        ${experienceStringB}
+        Education:
+        ${educationStringB}
+
+        **Analysis Task:**
+        Write a concise, 2-3 sentence explanation highlighting the key similarities in their careers, such as common industries, companies, or fields of study.
+        Remember to use their names, ${personADetails.name} and ${personBDetails.name}, in your response.
+
+        **Generated Explanation:**
+    `;
+
+    try {
+        const explanation = await InvokeLLM({ prompt: prompt });
+        return {
+            person_a: personADetails,
+            person_b: personBDetails,
+            explanation: String(explanation)
+        };
+    } catch (error) {
+        console.error("Error generating similarity explanation:", error);
+        return { explanation: "I was unable to generate a similarity explanation at this time.", message: "I was unable to generate a similarity explanation at this time." };
+    }
+  }
+
+  private static generateSimilarityExplanation(result: ExplainSimilarityResult): string {
+    const { explanation, message, person_a, person_b } = result;
+
+    if (message) {
+      return message;
+    }
+    
+    if (!explanation) {
+      return `I couldn't generate an explanation for the similarity between ${person_a?.name} and ${person_b?.name}.`;
+    }
+
+    return explanation;
   }
 }
 

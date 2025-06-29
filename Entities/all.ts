@@ -48,7 +48,7 @@ export interface ChatMessage {
 
 // Main type for intent classification from user query
 export type IntentData = {
-  intent: "find_path" | "rank_nodes" | "recommend_person" | "find_similar" | "find_bridge" | "select_node" | "general" | "find_potential_connections";
+  intent: "find_path" | "rank_nodes" | "recommend_person" | "find_similar" | "find_bridge" | "select_node" | "general" | "find_potential_connections" | "explain_similarity";
   entities: string[];
   parameters: {
     target_person?: string;
@@ -81,6 +81,13 @@ export interface FindPotentialConnectionsResult {
   message?: string;
 }
 
+export interface ExplainSimilarityResult {
+  person_a?: Person;
+  person_b?: Person;
+  explanation: string;
+  message?: string;
+}
+
 // Union of all possible graph query results
 export type GraphResults = 
   | FindPathResult 
@@ -90,7 +97,8 @@ export type GraphResults =
   | FindBridgeResult 
   | SelectNodeResult 
   | GeneralResult
-  | FindPotentialConnectionsResult;
+  | FindPotentialConnectionsResult
+  | ExplainSimilarityResult;
 
 class BaseModel {
     static list(): Promise<any[]> {
