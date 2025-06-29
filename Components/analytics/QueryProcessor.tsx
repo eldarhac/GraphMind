@@ -2,6 +2,7 @@ import { InvokeLLM } from '@/integrations/Core';
 import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
+import { supabaseClient } from '@/integrations/supabase-client';
 
 export default class QueryProcessor {
   static async processQuery(
@@ -21,23 +22,24 @@ export default class QueryProcessor {
 
       // --- Intent Classification Router ---
       const routerPrompt = `
-        You are an expert intent classification agent for a network graph application. Your task is to classify the user's query into one of the following categories: 'select_node', 'find_path', or 'relational_query'.
+        You are an expert intent classification router for a network analysis application. Your task is to classify the user's query into one of two categories: 'graph_query' or 'relational_query'.
 
         **INTENT DEFINITIONS:**
-        - 'select_node': Use for any request to find, show, highlight, or locate one or more specific participants on the graph.
-        - 'find_path': Use for any request about the connection, path, or relationship between two specific participants.
-        - 'relational_query': Use for questions that require querying factual data, like asking for lists or counts (e.g., 'who works at X?').
+        - 'graph_query': Use for ANY request about the STRUCTURE of the network. This includes questions about paths, connections, relationships, links, who is connected to whom, immediate connections, or how people are related.
+        - 'relational_query': Use ONLY for requests about the factual attributes of participants, such as finding lists of people based on their properties (like where they worked or studied), or asking for a count of people.
 
-        **EXAMPLES:**
-        Query: "How is Pamela Mayer and Cheryl Spears related?" -> "find_path"
-        Query: "Show me Mark Chandler" -> "select_node"
-        Query: "Can you highlight @Nicholas Walker for me?" -> "select_node"
-        Query: "Where is Misty Salinas?" -> "select_node"
-        Query: "List all participants from the University of Texas" -> "relational_query"
-        Query: "count how many people work at Google" -> "relational_query"
+        **CRITICAL EXAMPLES:**
+        Query: "Who are the immediate connections of @Mitchell Alexander" -> "graph_query"
+        Query: "Show me the path between Person A and Person B" -> "graph_query"
+        Query: "How are these two people related?" -> "graph_query"
+        Query: "List everyone who worked at Google" -> "relational_query"
+        Query: "How many people studied at MIT?" -> "relational_query"
+        Query: "Find people similar to @Pamela Mayer" -> "relational_query"  // Note: Similarity is based on properties, so it's relational.
+        Query: "Where did Justin Dougherty work in 2023?" -> "relational_query"
+
 
         ---
-        Based on these definitions and examples, classify the following user query.
+        Based on these strict definitions and examples, classify the following user query.
         User Query: "${message}"
 
         Respond with ONLY the string for the intent.
@@ -51,11 +53,12 @@ export default class QueryProcessor {
         .toLowerCase()
         .replace(/["'\n]/g, '')
         .trim();
-      if (!['select_node', 'find_path', 'relational_query'].includes(classifiedIntent)) {
+      console.log('Detected intent:', classifiedIntent);
+      if (!['graph_query', 'relational_query'].includes(classifiedIntent)) {
         classifiedIntent = 'knowledge_base_qa';
       }
 
-      if (classifiedIntent === 'select_node' || classifiedIntent === 'find_path') {
+      if (classifiedIntent === 'graph_query') {
         // Step 1: Extract intent and entities from user message with chat context
         const personNames = graphData.nodes.map(n => n.name);
         const intentResult: IntentData = await InvokeLLM({
@@ -210,19 +213,18 @@ export default class QueryProcessor {
           entities: []
         };
       } else {
+        // Fallback for any unhandled classifiedIntent, though the logic above should prevent this.
         const qaResponse = await answerQuestionAboutPerson(message);
-        const processingTime = Date.now() - startTime;
         return {
           response: qaResponse,
-          intent: "knowledge_base_qa",
+          intent: 'knowledge_base_qa',
           graphAction: null,
-          processingTime,
-          entities: []
+          processingTime: Date.now() - startTime
         };
       }
 
-    } catch (error) {
-      console.error('Query processing error:', error);
+    } catch (error: any) {
+      console.error('Error processing query:', error);
       return {
         response: "I encountered an issue processing your query. Could you please rephrase or try a different question?",
         intent: "general",
@@ -551,5 +553,36 @@ export default class QueryProcessor {
     const footer = `\n\nI've highlighted the full path on the graph.`;
     
     return `${header}\n\n${body}${footer}`;
+  }
+}
+
+export async function generateBioSummary(personData: { name: string, experience: any[], education: any[] }): Promise<string> {
+  // Convert the structured JSON data into a clean, readable string for the prompt
+  const experienceString = Array.isArray(personData.experience) 
+    ? personData.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
+    : 'No experience data available.';
+  const educationString = Array.isArray(personData.education) 
+    ? personData.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
+    : 'No education data available.';
+
+  const prompt = `
+    You are a professional biographer. Your task is to write a concise, one-paragraph summary of ${personData.name}'s career and academic history based ONLY on the data provided.
+    Write in a fluid, narrative style. Mention their most recent or significant role and their education. Do not just list the data.
+
+    **Professional Experience:**
+    ${experienceString}
+
+    **Education:**
+    ${educationString}
+
+    **Generated Summary:**
+  `;
+
+  try {
+    const summary = await InvokeLLM({ prompt: prompt });
+    return String(summary);
+  } catch (error) {
+    console.error("Error generating bio summary:", error);
+    return "Unable to generate a summary for this person at this time.";
   }
 }

@@ -24,6 +24,8 @@ export interface Person {
   layoutType?: 'core' | 'satellite';
   /** Number of connections used when categorizing layout type */
   degree?: number;
+  experience?: any[];
+  education?: any[];
 }
 
 export interface Connection {

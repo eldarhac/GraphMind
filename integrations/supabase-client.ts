@@ -53,7 +53,7 @@ async function getGraphData(): Promise<RawGraphData | null> {
 
   try {
     const [participantsRes, connectionsRes, avatarsRes] = await Promise.all([
-      supabase.from('participants2').select('*'),
+      supabase.from('participants2').select('*').select('*').limit(2000),
       supabase.from('connections').select('*'),
       supabase.from('avatars').select('*'),
     ]);
@@ -192,7 +192,8 @@ async function getAllParticipants(): Promise<any[] | null> {
   try {
     const { data, error } = await supabase
       .from('participants2')
-      .select('*');
+      .select('*')
+      .limit(2000);
 
     if (error) {
       console.error('Error fetching all participants from Supabase:', error);
@@ -206,11 +207,68 @@ async function getAllParticipants(): Promise<any[] | null> {
   }
 }
 
+async function getSimilarParticipants(personId: string, count: number = 5): Promise<any[] | null> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.error("Supabase client is not configured.");
+    return null;
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('find_similar_participants', {
+      target_id: personId,
+      match_count: count
+    });
+
+    if (error) {
+      console.error('Error calling find_similar_participants RPC:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('An unexpected error occurred during the RPC call:', error);
+    return null;
+  }
+}
+
+async function getParticipantById(personId: string): Promise<Person | null> {
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('participants2')
+      .select('*')
+      .eq('id', personId)
+      .single(); // Fetch a single record
+
+    if (error) {
+      console.error('Error fetching participant by ID from Supabase:', error);
+      return null;
+    }
+    
+    if (!data) return null;
+
+    // Safely parse JSON string fields
+    const parsedData = {
+      ...data,
+      experience: safeJsonParse(data.experience),
+      education: safeJsonParse(data.education),
+    };
+
+    return parsedData as Person;
+  } catch (error) {
+    console.error('An unexpected error occurred while fetching participant by ID:', error);
+    return null;
+  }
+}
+
 export const supabaseClient = {
     getParticipantDetails,
+    getParticipantById,
     executeSql,
     getAllParticipants,
     getConnections,
     getAvatars,
     getGraphData,
+    getSimilarParticipants,
 };

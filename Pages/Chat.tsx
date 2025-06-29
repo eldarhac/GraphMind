@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { getHybridGraphData } from "@/services/hybridDataService";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,8 +6,9 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
 import GraphCanvas from "@/Components/graph/GraphCanvas";
-import QueryProcessor from "@/Components/analytics/QueryProcessor";
+import QueryProcessor, { generateBioSummary } from "@/Components/analytics/QueryProcessor";
 import { Mention } from "@/types/mentions";
+import { supabaseClient } from "@/integrations/supabase-client";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -21,6 +22,23 @@ export default function ChatPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [pendingMention, setPendingMention] = useState<Mention | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [bioSummary, setBioSummary] = useState({ isLoading: false, content: '' });
+
+  const connectionStats = useMemo(() => {
+    if (!selectedPerson) return { count: 0, types: 0 };
+
+    const nodeConnections = graphData.connections.filter(conn =>
+        conn.person_a_id === selectedPerson.id || conn.person_b_id === selectedPerson.id
+    );
+
+    const connectionTypes = new Set(nodeConnections.map(c => c.connection_type).filter(t => t === 'WORK' || t === 'STUDY'));
+
+    return {
+        count: nodeConnections.length,
+        types: connectionTypes.size
+    };
+  }, [selectedPerson, graphData.connections]);
 
   useEffect(() => {
     loadInitialData();
@@ -30,6 +48,38 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (selectedPerson?.id) {
+      setBioSummary({ isLoading: true, content: '' });
+
+      supabaseClient.getParticipantById(selectedPerson.id).then(fullPersonDetails => {
+        // Ensure the user is still selected and matches the fetched details to prevent race conditions.
+        if (fullPersonDetails && selectedPerson?.id === fullPersonDetails.id) {
+          // Update the state with the full details, which will re-render the card with correct title, etc.
+          setSelectedPerson(fullPersonDetails);
+
+          // Now, generate the summary with the complete data.
+          generateBioSummary({
+            name: fullPersonDetails.name,
+            experience: fullPersonDetails.experience || [],
+            education: fullPersonDetails.education || [],
+          }).then(summary => {
+            // A final check for race conditions before setting the final state.
+            if (selectedPerson?.id === fullPersonDetails.id) {
+              setBioSummary({ isLoading: false, content: summary });
+            }
+          });
+        } else if (selectedPerson?.id) {
+          // Handle cases where details for a selected user couldn't be fetched.
+          setBioSummary({
+            isLoading: false,
+            content: `Could not load complete details for ${selectedPerson.name}.`,
+          });
+        }
+      });
+    }
+  }, [selectedPerson?.id]);
 
   const loadInitialData = async () => {
     setIsLoading(true);
@@ -192,6 +242,15 @@ Click on any person in the graph to mention them in your message!`,
     }
   };
 
+  const handleMention = (person: Person) => {
+    if (!person) return;
+    const mention: Mention = {
+      id: person.id,
+      name: person.name
+    };
+    setPendingMention(mention);
+  };
+
   const handleMentionInserted = () => {
     // Clear the pending mention after it's been inserted
     setPendingMention(null);
@@ -305,45 +364,103 @@ Click on any person in the graph to mention them in your message!`,
       </div>
 
       {/* Graph Panel */}
-      <div className="p-6 flex flex-col" style={{ width: `${graphPanelWidth}%` }}>
-        {/* Graph Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleGraphPanel}
-              className="p-1 rounded hover:bg-slate-800/50 transition-colors"
-              title={graphPanelWidth === 20 ? "Expand panel" : "Collapse panel"}
-            >
-              {graphPanelWidth === 20 ? (
-                <ChevronLeft className="w-4 h-4 text-slate-400" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              )}
+      <div className="flex flex-col relative" style={{ width: `${graphPanelWidth}%` }}>
+        {/* Header */}
+        <div className="p-6 border-b border-l border-slate-700/50 glass-effect">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-white">Network Graph</h1>
+            <button onClick={toggleGraphPanel} className="text-slate-400 hover:text-white">
+              {graphPanelWidth > 25 ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
             </button>
-            <div>
-              <h2 className="text-lg font-bold text-white">Network Visualization</h2>
-              <p className="text-sm text-slate-400">Click nodes to mention people</p>
-            </div>
           </div>
-          {(highlightedNodeIds.length > 0 || highlightedConnections.length > 0) && (
-            <button
-              onClick={clearHighlights}
-              className="px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/50 transition-all duration-200"
-            >
-              Clear Highlights
-            </button>
-          )}
         </div>
+        
+        {/* Canvas */}
+        <div className="flex-1 min-h-0 relative">
+          <AnimatePresence>
+            {graphPanelWidth > 0 && (
+              <motion.div 
+                className="w-full h-full bg-slate-900"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <GraphCanvas
+                  nodes={graphData.nodes}
+                  connections={graphData.connections}
+                  highlightedNodeIds={highlightedNodeIds}
+                  highlightedConnections={highlightedConnections}
+                  onNodeClick={(nodeId: string) => {
+                    const node = graphData.nodes.find(n => n.id === nodeId);
+                    setSelectedPerson(node || null);
+                  }}
+                  onBackgroundClick={() => setSelectedPerson(null)}
+                  currentUser={currentUser}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          {selectedPerson && (
+            <div className="absolute top-20 right-8 w-80 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 animate-fade-in z-10">
+              <button onClick={() => setSelectedPerson(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl">&times;</button>
+      
+              {/* --- SECTION 1: Person Header (Restored) --- */}
+              <div className="flex items-center gap-4 mb-4">
+                {/* Avatar Logic */}
+                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex-shrink-0 flex items-center justify-center">
+                  {selectedPerson.profile_picture_url ? (
+                    <img src={selectedPerson.profile_picture_url} alt={selectedPerson.name} className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    <span className="text-white font-bold text-lg">{selectedPerson.name.charAt(0)}</span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">{selectedPerson.name}</h3>
+                  <p className="text-slate-300 text-sm">{selectedPerson.title}</p>
+                </div>
+              </div>
+      
+              {/* --- SECTION 2: Action Button (Restored) --- */}
+              <button
+                onClick={() => handleMention(selectedPerson)}
+                className="w-full text-left px-3 py-2 mb-4 rounded-lg text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+              >
+                <span className="font-mono text-xl">@</span>
+                <span>mention in chat</span>
+              </button>
+      
+              {/* --- SECTION 3: AI Summary (Existing Feature) --- */}
+              <div>
+                <h4 className="text-sm font-medium text-slate-400 mb-2 border-t border-slate-700/50 pt-4">AI-Generated Summary</h4>
+                {bioSummary.isLoading ? (
+                  <p className="text-slate-400 text-sm animate-pulse">Generating summary...</p>
+                ) : (
+                  <p className="text-slate-300 text-sm leading-relaxed">{bioSummary.content}</p>
+                )}
+              </div>
 
-        {/* Graph Canvas */}
-        <div className="flex-1 min-h-0">
-          <GraphCanvas
-            nodes={graphData.nodes}
-            connections={graphData.connections}
-            highlightedNodeIds={highlightedNodeIds}
-            highlightedConnections={highlightedConnections}
-            onMentionNode={handleNodeMention}
-          />
+              {/* --- SECTION 4: Connection Stats (Merged) --- */}
+              <div className="mt-4 border-t border-slate-700/50 pt-4">
+                  <h4 className="text-sm font-medium text-slate-400 mb-2">Connection Statistics</h4>
+                  <div className="space-y-2 text-sm">
+                      <div className="flex justify-between items-center">
+                          <span className="text-slate-300">Total Connections</span>
+                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">{connectionStats.count}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                          <span className="text-slate-300">Avg. Strength</span>
+                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">1.0/10</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                          <span className="text-slate-300">Connection Types</span>
+                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">{connectionStats.types}</span>
+                      </div>
+                  </div>
+              </div>
+      
+            </div>
+          )}
         </div>
       </div>
     </div>

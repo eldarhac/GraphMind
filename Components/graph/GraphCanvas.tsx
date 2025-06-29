@@ -5,7 +5,6 @@ type LinkObject = any;
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
-import NetworkDetailsCard from './NetworkDetailsCard';
 
 const CENTRAL_USER_ID = "eldar-refael-hacohen-58b4b018a";
 
@@ -31,7 +30,9 @@ interface GraphCanvasProps {
   connections: Connection[];
   highlightedNodeIds?: string[];
   highlightedConnections?: string[];
-  onMentionNode?: (nodeId: string) => void;
+  onNodeClick?: (nodeId: string) => void;
+  onBackgroundClick?: () => void;
+  currentUser?: Person | null;
 }
 
 export default function GraphCanvas({
@@ -39,14 +40,14 @@ export default function GraphCanvas({
   connections = [],
   highlightedNodeIds = [],
   highlightedConnections = [],
-  onMentionNode,
+  onNodeClick,
+  onBackgroundClick,
+  currentUser,
 }: GraphCanvasProps) {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [avatarImages, setAvatarImages] = useState<Record<string, HTMLImageElement>>({});
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [nodePosition, setNodePosition] = useState<{ x: number, y: number } | null>(null);
 
   useEffect(() => {
     const observer = new ResizeObserver(entries => {
@@ -127,48 +128,19 @@ export default function GraphCanvas({
   }, [graphData]);
 
   const handleNodeClick = useCallback((node: NodeObject) => {
-    const graphNode = node as GraphNode;
-
-    // Immediately set the selected node to give user feedback
-    setSelectedNode(graphNode);
+    if (onNodeClick) {
+      onNodeClick(node.id);
+    }
 
     // Defer the animation and position calculation to allow the state to update
     // and to ensure graph engine has settled on coordinates.
     setTimeout(() => {
         if (fgRef.current && typeof node.x === 'number' && typeof node.y === 'number') {
-            const screenCoords = fgRef.current.graph2ScreenCoords(node.x, node.y);
-            setNodePosition(screenCoords);
-            
             fgRef.current.centerAt(node.x, node.y, 1000);
             fgRef.current.zoom(2, 500);
         }
     }, 0);
-  }, []);
-
-  const handleBackgroundClick = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
-
-  const handleCloseDetails = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
-  
-  const { connectionsCount, connectionTypesCount } = useMemo(() => {
-    if (!selectedNode) return { connectionsCount: 0, connectionTypesCount: 0 };
-
-    const nodeConnections = graphData.links.filter(link => {
-        const sourceId = typeof link.source === 'object' ? (link.source as GraphNode).id : link.source;
-        const targetId = typeof link.target === 'object' ? (link.target as GraphNode).id : link.target;
-        return sourceId === selectedNode.id || targetId === selectedNode.id;
-    });
-
-    const types = new Set(nodeConnections.map(c => c.type).filter(t => t === 'WORK' || t === 'STUDY'));
-    
-    return {
-        connectionsCount: nodeConnections.length,
-        connectionTypesCount: types.size
-    };
-  }, [selectedNode, graphData.links]);
+  }, [onNodeClick]);
 
   const nodeCanvasObject = useCallback((node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const graphNode = node as GraphNode;
@@ -308,23 +280,12 @@ export default function GraphCanvas({
         linkCanvasObject={linkCanvasObject}
         linkCanvasObjectMode={() => "replace"}
         onNodeClick={handleNodeClick}
-        onBackgroundClick={handleBackgroundClick}
+        onBackgroundClick={onBackgroundClick}
         cooldownTicks={100}
         onEngineStop={() => fgRef.current?.zoomToFit(400, 50)}
         enableZoomInteraction
         enablePanInteraction
       />
-
-      {selectedNode && nodePosition && onMentionNode && (
-        <NetworkDetailsCard
-          node={selectedNode}
-          connectionsCount={connectionsCount}
-          connectionTypesCount={connectionTypesCount}
-          onClose={handleCloseDetails}
-          onMention={onMentionNode}
-          position={nodePosition}
-        />
-      )}
 
       {/* Controls */}
       <div className="absolute top-4 right-4 flex gap-2">
@@ -359,6 +320,19 @@ export default function GraphCanvas({
         <div className="text-sm text-slate-300">
           <span className="text-blue-400 font-medium">{nodes.length}</span> nodes • 
           <span className="text-indigo-400 font-medium ml-1">{connections.length}</span> connections
+        </div>
+      </div>
+
+      {/* Connection Legend */}
+      <div className="absolute bottom-4 right-4 bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 px-4 py-2">
+        <h4 className="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-2">Connection Legend</h4>
+        <div className="space-y-1">
+          {Object.entries(CONNECTION_TYPE_COLOR).map(([type, color]) => (
+            <div key={type} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }}></div>
+              <span className="text-sm text-slate-300 capitalize">{type.toLowerCase()}</span>
+            </div>
+          ))}
         </div>
       </div>
 

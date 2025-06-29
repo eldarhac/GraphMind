@@ -38,12 +38,22 @@ async function generateAndStoreEmbeddings() {
 
   for (const participant of participants) {
     // 1. Create a descriptive document for the participant
+    const name = participant.name;
+    const position = participant.position || '';
+    
+    // Convert structured experience/education to a descriptive string
+    const experienceString = Array.isArray(participant.experience) ? participant.experience.map(exp => `${exp.title} at ${exp.company}`).join(', ') : (participant.experience || '');
+    const educationString = Array.isArray(participant.education) ? participant.education.map(edu => `${edu.degree} from ${edu.school}`).join(', ') : (JSON.stringify(participant.education) || '');
+    const publicationsString = Array.isArray(participant.publications) ? participant.publications.map(pub => pub.title).join(', ') : (participant.publications || '');
+    
+    // 2. Construct the document, giving more weight to education and experience
+    // The name is not included, while the education and experience are repeated.
     const document = `
-      Name: ${participant.name || ''}
-      Position: ${participant.position || ''}
-      Experience: ${participant.experience || ''}
-      Education: ${JSON.stringify(participant.education) || ''}
-      Publications: ${participant.publications || ''}
+      Current Role: ${position}.
+
+      Key Experience: ${experienceString}.
+      
+      Educational Background: ${educationString}.
     `.trim();
 
     // 2. Generate embedding for the document
