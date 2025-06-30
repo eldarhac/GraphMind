@@ -772,14 +772,7 @@ export default class QueryProcessor {
   }
 }
 
-function formatYear(dateString?: string | number): string | null {
-  if (!dateString) return null;
-  const year = new Date(dateString).getFullYear();
-  return isNaN(year) ? String(dateString) : String(year);
-}
-
-export async function generateBioSummary(personData: { name:string; experience:Experience[]; education:Education[]; }): Promise<string> {
-    
+export async function generateBioSummary(personData: { name: string, experience: Experience[], education: Education[] }): Promise<string> {
   let experience = personData.experience || [];
   let education = personData.education || [];
 
@@ -801,69 +794,34 @@ export async function generateBioSummary(personData: { name:string; experience:E
     }
   }
 
-  const experienceItems = (Array.isArray(experience) ? experience : [])
-    .flatMap(exp => {
-        const company = exp.company || '';
+  // Ensure experience and education are arrays before stringifying.
+  const experienceJSON = JSON.stringify(Array.isArray(experience) ? experience : [], null, 2);
+  const educationJSON = JSON.stringify(Array.isArray(education) ? education : [], null, 2);
 
-        if (exp.positions && Array.isArray(exp.positions) && exp.positions.length > 0) {
-            // This is a company with multiple roles
-            return exp.positions.map(pos => {
-                const title = pos.title || '';
-                const startDate = pos.start_date;
-                const endDate = pos.end_date || 'Present';
-                const datePart = startDate ? ` (${startDate} - ${endDate})` : '';
+  const prompt = `
+    You are an expert at summarizing professional profiles. Your task is to write a very short, coherent, and cohesive summary (1-2 sentences) about ${personData.name}, based ONLY on the provided JSON data for their work experience and education.
+    Be extremely concise and stick to the facts in the data. Do not make assumptions or add information not present.
 
-                let line = '- ';
-                if (title) line += title;
-                if (company) line += ` at ${company}`;
-                line += datePart;
-                return line;
-            });
-        } else {
-            // This is a single role
-            const title = exp.title || '';
-            if (!title && !company) return null;
+    **Experience Data for ${personData.name}:**
+    ${experienceJSON}
 
-            const startDate = exp.start_date;
-            const endDate = exp.end_date || 'Present';
-            const datePart = startDate ? ` (${startDate} - ${endDate})` : '';
+    **Education Data for ${personData.name}:**
+    ${educationJSON}
 
-            let line = '- ';
-            if (title) line += title;
-            if (company) line += ` at ${company}`;
-            line += datePart;
-            return line;
-        }
-    })
-    .filter(Boolean);
+    **Instructions:**
+    - Synthesize the provided information into a brief narrative.
+    - Mention key roles, companies, and educational achievements.
+    - The summary must be grounded and directly reflect the data.
+    - Your response must begin directly with the summary itself, with no introductory text like "Here is a summary...".
 
-  const educationItems = (Array.isArray(education) ? education : [])
-    .map(edu => {
-      const degree = edu.degree || 'Degree';
-      const school = edu.school || edu.title; // 'title' field for school name
-      const startYear = formatYear(edu.start_year);
-      const endYear = formatYear(edu.end_year);
-      const datePart = startYear && endYear ? ` (${startYear} - ${endYear})` : (startYear ? ` (${startYear})` : '');
-      
-      let line = '- ';
-      if (degree && degree !== 'Degree') line += degree;
-      if (school) line += ` from ${school}`;
-      line += datePart;
-      
-      // Don't return just "- Degree" or an empty line with only a date
-      if (line.trim() === '- Degree' || (line.trim().startsWith('- (') && line.trim().endsWith(')'))) return null;
+    **Generated Summary:**
+  `;
 
-      return line;
-    })
-    .filter(Boolean);
-
-  const summaryParts = [];
-  if (experienceItems.length > 0) {
-    summaryParts.push(`Work:\n${experienceItems.join('\n')}`);
+  try {
+    const summary = await InvokeLLM({ prompt });
+    return String(summary).trim();
+  } catch (error) {
+    console.error("Error generating LLM-based bio summary:", error);
+    return `Could not generate a summary for ${personData.name}.`;
   }
-  if (educationItems.length > 0) {
-    summaryParts.push(`Education:\n${educationItems.join('\n')}`);
-  }
-  
-  return Promise.resolve(summaryParts.join('\n\n'));
 }
