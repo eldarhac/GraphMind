@@ -24,9 +24,7 @@ export default function MessageBubble({ message, isUser, timestamp, processingTi
         >
             {/* Avatar */}
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                isUser 
-                    ? 'bg-muted' 
-                    : 'bg-muted dark:bg-gradient-to-r dark:from-purple-500 dark:to-pink-600'
+                'bg-muted'
             }`}>
                 {isUser 
                     ? <User className="w-6 h-6 text-muted-foreground" />
