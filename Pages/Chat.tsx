@@ -290,16 +290,16 @@ Click on any person in the graph to mention them in your message!`,
   };
 
   return (
-    <div className="h-[calc(100vh-5rem)] flex">
+    <div className="h-[calc(100vh-5rem)] flex bg-background text-foreground">
       {/* Chat Panel */}
       <div className="flex flex-col" style={{ width: `${100 - graphPanelWidth}%` }}>
         {/* Header */}
-        <div className="h-20 px-6 flex items-center border-b border-slate-700/50 glass-effect">
+        <div className="h-20 px-6 flex items-center border-b border-border bg-card/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
             <div>
-              <h1 className="text-xl font-bold text-white">Network Assistant</h1>
-              <p className="text-sm text-slate-400">
+              <h1 className="text-xl font-bold text-foreground">Network Assistant</h1>
+              <p className="text-sm text-muted-foreground">
                 Connected to {graphData.nodes.length} people, {graphData.connections.length} connections
               </p>
             </div>
@@ -307,7 +307,7 @@ Click on any person in the graph to mention them in your message!`,
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-background">
           <AnimatePresence>
             {messages.map((message) => (
               <MessageBubble
@@ -326,10 +326,10 @@ Click on any person in the graph to mention them in your message!`,
               animate={{ opacity: 1 }}
               className="flex gap-3"
             >
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-purple-500 to-pink-600 flex items-center justify-center">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted dark:bg-gradient-to-r dark:from-purple-500 dark:to-pink-600">
+                <div className="w-4 h-4 border-2 rounded-full animate-spin border-muted-foreground/30 border-t-muted-foreground"></div>
               </div>
-              <div className="flex items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-muted-foreground">
                 <span>Analyzing network...</span>
               </div>
             </motion.div>
@@ -339,7 +339,7 @@ Click on any person in the graph to mention them in your message!`,
         </div>
 
         {/* Input Area */}
-        <div className="h-24 p-6 flex items-center border-t border-slate-700/50 glass-effect">
+        <div className="h-24 p-6 flex items-center border-t border-border bg-card/80 backdrop-blur-xl">
           <ChatInput 
             onSendMessage={handleSendMessage}
             isProcessing={isProcessing}
@@ -352,14 +352,14 @@ Click on any person in the graph to mention them in your message!`,
 
       {/* Resize Handle */}
       <div
-        className="w-1 bg-slate-700/50 hover:bg-slate-600 cursor-col-resize flex items-center justify-center group transition-colors"
+        className="w-1 bg-border hover:bg-primary/20 cursor-col-resize flex items-center justify-center group transition-colors"
         onMouseDown={handleMouseDown}
       >
-        <div className="w-4 h-12 bg-slate-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+        <div className="w-4 h-12 bg-muted-foreground/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
           {graphPanelWidth > 40 ? (
-            <ChevronRight className="w-3 h-3 text-slate-300" />
+            <ChevronRight className="w-3 h-3 text-foreground" />
           ) : (
-            <ChevronLeft className="w-3 h-3 text-slate-300" />
+            <ChevronLeft className="w-3 h-3 text-foreground" />
           )}
         </div>
       </div>
@@ -367,10 +367,10 @@ Click on any person in the graph to mention them in your message!`,
       {/* Graph Panel */}
       <div className="flex flex-col relative" style={{ width: `${graphPanelWidth}%` }}>
         {/* Header */}
-        <div className="h-20 px-6 flex items-center border-b border-l border-slate-700/50 glass-effect">
+        <div className="h-20 px-6 flex items-center border-b border-l border-border bg-card/80 backdrop-blur-xl">
           <div className="flex items-center justify-between w-full">
-            <h1 className="text-xl font-bold text-white">Network Graph</h1>
-            <button onClick={toggleGraphPanel} className="text-slate-400 hover:text-white">
+            <h1 className="text-xl font-bold text-foreground">Network Graph</h1>
+            <button onClick={toggleGraphPanel} className="text-muted-foreground hover:text-foreground">
               {graphPanelWidth > 25 ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
             </button>
           </div>
@@ -381,7 +381,7 @@ Click on any person in the graph to mention them in your message!`,
           <AnimatePresence>
             {graphPanelWidth > 0 && (
               <motion.div 
-                className="w-full h-full bg-slate-900"
+                className="w-full h-full bg-background"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -403,29 +403,29 @@ Click on any person in the graph to mention them in your message!`,
             )}
           </AnimatePresence>
           {selectedPerson && (
-            <div className="absolute top-20 right-8 w-80 bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 animate-fade-in z-10">
-              <button onClick={() => setSelectedPerson(null)} className="absolute top-4 right-4 text-slate-400 hover:text-white text-2xl">&times;</button>
+            <div className="absolute top-4 right-4 w-80 bg-card/80 backdrop-blur-sm border border-border rounded-2xl p-6 animate-fade-in z-10">
+              <button onClick={() => setSelectedPerson(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground text-2xl">&times;</button>
       
               {/* --- SECTION 1: Person Header (Restored) --- */}
               <div className="flex items-center gap-4 mb-4">
                 {/* Avatar Logic */}
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex-shrink-0 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-primary flex-shrink-0 flex items-center justify-center">
                   {selectedPerson.profile_picture_url ? (
                     <img src={selectedPerson.profile_picture_url} alt={selectedPerson.name} className="w-full h-full rounded-full object-cover" />
                   ) : (
-                    <span className="text-white font-bold text-lg">{selectedPerson.name.charAt(0)}</span>
+                    <span className="text-primary-foreground font-bold text-lg">{selectedPerson.name.charAt(0)}</span>
                   )}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">{selectedPerson.name}</h3>
-                  <p className="text-slate-300 text-sm">{selectedPerson.title}</p>
+                  <h3 className="text-lg font-bold text-foreground">{selectedPerson.name}</h3>
+                  <p className="text-muted-foreground text-sm">{selectedPerson.title}</p>
                 </div>
               </div>
       
               {/* --- SECTION 2: Action Button (Restored) --- */}
               <button
                 onClick={() => handleMention(selectedPerson)}
-                className="w-full text-left px-3 py-2 mb-4 rounded-lg text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+                className="w-full text-left px-3 py-2 mb-4 rounded-lg text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-2"
               >
                 <span className="font-mono text-xl">@</span>
                 <span>mention in chat</span>
@@ -435,36 +435,36 @@ Click on any person in the graph to mention them in your message!`,
               <div>
                 <button
                   onClick={() => {}}
-                  className="w-full text-left px-3 py-2 mb-4 rounded-lg text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+                  className="w-full text-left px-3 py-2 mb-4 rounded-lg text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-2"
                 >
                   <Mail size={16} />
                   <span>Generate Reachout Email</span>
                 </button>
-                <h4 className="text-sm font-medium text-slate-400 mb-2 border-t border-slate-700/50 pt-4">AI-Generated Summary</h4>
+                <h4 className="text-sm font-medium text-muted-foreground mb-2 border-t border-border pt-4">AI-Generated Summary</h4>
                 {bioSummary.isLoading ? (
-                  <p className="text-slate-400 text-sm animate-pulse">Generating summary...</p>
+                  <p className="text-muted-foreground text-sm animate-pulse">Generating summary...</p>
                 ) : (
                   <div className="max-h-36 overflow-y-auto pr-2">
-                    <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-line">{bioSummary.content}</p>
+                    <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-line">{bioSummary.content}</p>
                   </div>
                 )}
               </div>
 
               {/* --- SECTION 4: Connection Stats (Merged) --- */}
-              <div className="mt-4 border-t border-slate-700/50 pt-4">
-                  <h4 className="text-sm font-medium text-slate-400 mb-2">Connection Statistics</h4>
+              <div className="mt-4 border-t border-border pt-4">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Connection Statistics</h4>
                   <div className="space-y-2 text-sm">
                       <div className="flex justify-between items-center">
-                          <span className="text-slate-300">Total Connections</span>
-                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">{connectionStats.count}</span>
+                          <span className="text-muted-foreground">Total Connections</span>
+                          <span className="font-mono font-bold text-foreground bg-muted/50 rounded px-2 py-0.5">{connectionStats.count}</span>
                       </div>
                       <div className="flex justify-between items-center">
-                          <span className="text-slate-300">Avg. Strength</span>
-                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">1.0/10</span>
+                          <span className="text-muted-foreground">Avg. Strength</span>
+                          <span className="font-mono font-bold text-foreground bg-muted/50 rounded px-2 py-0.5">1.0/10</span>
                       </div>
                       <div className="flex justify-between items-center">
-                          <span className="text-slate-300">Connection Types</span>
-                          <span className="font-mono font-bold text-white bg-slate-700/50 rounded px-2 py-0.5">{connectionStats.types}</span>
+                          <span className="text-muted-foreground">Connection Types</span>
+                          <span className="font-mono font-bold text-foreground bg-muted/50 rounded px-2 py-0.5">{connectionStats.types}</span>
                       </div>
                   </div>
               </div>

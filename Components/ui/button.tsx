@@ -2,12 +2,12 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react';
 
 // A simplified version of shadcn's button with variants
 const buttonVariants = {
-  default: "bg-slate-900 text-white hover:bg-slate-800",
-  destructive: "bg-red-500 text-white hover:bg-red-600",
-  outline: "border border-slate-700 bg-transparent hover:bg-slate-800",
-  secondary: "bg-slate-700 text-white hover:bg-slate-600",
-  ghost: "hover:bg-slate-800",
-  link: "text-white underline-offset-4 hover:underline",
+  default: "bg-primary text-primary-foreground hover:bg-primary/90",
+  destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+  outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+  secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+  ghost: "hover:bg-accent hover:text-accent-foreground",
+  link: "text-primary underline-offset-4 hover:underline",
 };
 
 const sizeVariants = {

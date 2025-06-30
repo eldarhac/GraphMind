@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
-@tailwind utilities; 
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  :root {
+    --background: 240 10% 99%; /* slate-50 */
+    --foreground: 222 47% 11%; /* slate-900 */
+    --card: 240 10% 100%; /* white */
+    --card-foreground: 222 47% 11%; /* slate-900 */
+    --muted: 215 28% 92%; /* slate-200 */
+    --muted-foreground: 215 20% 55%; /* slate-500 */
+    --primary: 217 91% 60%; /* blue-500 */
+    --primary-foreground: 210 40% 98%; /* slate-50 */
+    --border: 215 28% 92%; /* slate-200 */
+    --ring: 217 91% 60%;
+  }
+
+  .dark {
+    --background: 225 15% 9%;
+    --foreground: 210 20% 98%; /* slate-50 */
+    --card: 222 47% 11%; /* slate-900 */
+    --card-foreground: 210 20% 98%; /* slate-50 */
+    --muted: 217 33% 17%; /* slate-800 */
+    --muted-foreground: 215 20% 65%; /* slate-400 */
+    --primary: 217 91% 60%; /* blue-500 */
+    --primary-foreground: 210 40% 98%;
+    --border: 217 33% 17%; /* slate-800 */
+    --ring: 217 91% 60%;
+  }
+} 

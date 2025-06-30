@@ -1,8 +1,11 @@
 import { Link, useLocation } from "react-router-dom";
-import { MessageSquare, Network, Users, Settings, Sparkles } from "lucide-react";
+import { MessageSquare, Network, Users, Settings, Sparkles, Sun, Moon } from "lucide-react";
+import { useTheme } from "./Components/ui/ThemeProvider";
+import { Button } from "./Components/ui/button";
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const { setTheme, theme } = useTheme();
 
   const navigationItems = [
     {
@@ -32,48 +35,14 @@ export default function Layout({ children }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
-      <style>{`
-        :root {
-          --primary-gradient: linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%);
-          --glass-bg: rgba(15, 23, 42, 0.8);
-          --glass-border: rgba(59, 130, 246, 0.2);
-          --text-primary: #F8FAFC;
-          --text-secondary: #CBD5E1;
-          --accent: #3B82F6;
-        }
-        
-        .glass-effect {
-          background: var(--glass-bg);
-          backdrop-filter: blur(20px);
-          border: 1px solid var(--glass-border);
-        }
-        
-        .text-glow {
-          text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
-        }
-        
-        .animate-pulse-slow {
-          animation: pulse 3s infinite;
-        }
-        
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-        
-        .animate-float {
-          animation: float 6s ease-in-out infinite;
-        }
-      `}</style>
-
+    <div className="min-h-screen bg-background">
       {/* Navigation Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-20 glass-effect z-40 border-r border-slate-700/50">
+      <div className="fixed left-0 top-0 h-full w-20 bg-card/80 backdrop-blur-xl border-r border-border z-40">
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="h-20 p-4 flex items-center justify-center border-b border-slate-700/50">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center animate-float flex-shrink-0">
-              <Sparkles className="w-6 h-6 text-white" />
+          <div className="h-20 p-4 flex items-center justify-center border-b border-border">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center animate-float flex-shrink-0">
+              <Sparkles className="w-6 h-6 text-primary-foreground" />
             </div>
           </div>
 
@@ -89,13 +58,13 @@ export default function Layout({ children }) {
                     className={`
                       group relative flex items-center justify-center gap-3 px-4 py-3 rounded-xl transition-all duration-300
                       ${isActive 
-                        ? 'bg-gradient-to-r from-blue-500/20 to-indigo-600/20 text-blue-400 border border-blue-500/30' 
-                        : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                        ? 'bg-primary/20 text-primary border border-primary/30' 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                       }
                     `}
                   >
-                    <item.icon className={`w-6 h-6 ${isActive ? 'text-blue-400' : 'group-hover:text-white'}`} />
-                    <span className="absolute left-full ml-4 px-2 py-1 rounded-md bg-slate-800 text-sm text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                    <item.icon className={`w-6 h-6 ${isActive ? 'text-primary' : 'group-hover:text-foreground'}`} />
+                    <span className="absolute left-full ml-4 px-2 py-1 rounded-md bg-muted text-sm text-foreground opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                       {item.name}
                     </span>
                   </Link>
@@ -105,9 +74,9 @@ export default function Layout({ children }) {
           </nav>
 
           {/* User Profile */}
-          <div className="h-24 p-4 flex items-center justify-center border-t border-slate-700/50">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-sm font-bold">U</span>
+          <div className="h-24 p-4 flex items-center justify-center border-t border-border">
+            <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+              <span className="text-sm font-bold text-primary-foreground">U</span>
             </div>
           </div>
         </div>
@@ -116,10 +85,21 @@ export default function Layout({ children }) {
       {/* Main Content */}
       <div className="ml-20 min-h-screen">
         {/* Header Bar */}
-        <header className="fixed top-0 left-20 right-0 h-20 px-8 flex items-center justify-center glass-effect z-30 border-b border-slate-700/50">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-white text-glow">Graphoscope</h1>
-            <p className="text-sm text-slate-400">Your Personal Network Intelligence Engine</p>
+        <header className="fixed top-0 left-20 right-0 h-20 px-8 flex items-center justify-between bg-card/80 backdrop-blur-xl z-30 border-b border-border">
+          <div className="text-center invisible">
+            {/* This is a spacer, the real title is centered below */}
+            <h1 className="text-4xl font-bold">Graphoscope</h1>
+          </div>
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <h1 className="text-4xl font-bold text-foreground">Graphoscope</h1>
+            <p className="text-sm text-muted-foreground text-center">An AI That Sees What LinkedIn Can't</p>
+          </div>
+          <div>
+            <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="text-muted-foreground">
+                <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <span className="sr-only">Toggle theme</span>
+            </Button>
           </div>
         </header>
         
@@ -130,8 +110,8 @@ export default function Layout({ children }) {
 
       {/* Background Effects */}
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse-slow"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse-slow"></div>
       </div>
     </div>
   );

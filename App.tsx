@@ -6,10 +6,11 @@ import Chat from './Pages/Chat';
 import Network from './Pages/Network';
 import People from './Pages/People';
 import Profile from './Pages/Profile';
+import { ThemeProvider } from './Components/ui/ThemeProvider';
 
 function App() {
   return (
-    <>
+    <ThemeProvider defaultTheme="dark" storageKey="graphmind-theme">
       <StagewiseToolbar
         config={{
           plugins: [ReactPlugin],
@@ -26,7 +27,7 @@ function App() {
           </Routes>
         </Layout>
       </Router>
-    </>
+    </ThemeProvider>
   );
 }
 

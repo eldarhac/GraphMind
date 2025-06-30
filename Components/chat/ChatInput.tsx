@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Mention } from '@/types/mentions';
+import { motion } from 'framer-motion';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -77,8 +78,8 @@ export default function ChatInput({
     }
   }, [inputValue]);
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInputValue(suggestion);
+  const handleSuggestionClick = (text: string) => {
+    setInputValue(text);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
@@ -134,6 +135,17 @@ export default function ChatInput({
     return parts;
   };
 
+  const suggestionVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: i * 0.05,
+      },
+    }),
+  };
+
   return (
     <div className="w-full relative">
       <form
@@ -145,7 +157,7 @@ export default function ChatInput({
       >
         <div className="flex-1 relative">
           {/* Background container */}
-          <div className="absolute inset-0 rounded-xl bg-slate-800/50 border border-slate-700/50 focus-within:ring-2 focus-within:ring-blue-500/50"></div>
+          <div className="absolute inset-0 rounded-xl bg-muted-foreground/20 border border-slate-700/50 focus-within:ring-2 focus-within:ring-blue-500/50"></div>
           
           {/* Placeholder */}
           {!inputValue && (
@@ -160,8 +172,8 @@ export default function ChatInput({
               <span
                 key={index}
                 className={part.type === 'mention' 
-                  ? 'bg-blue-500/30 text-blue-300 px-1 rounded' 
-                  : 'text-white'
+                  ? 'bg-blue-500/30 text-foreground px-1 rounded' 
+                  : 'text-foreground'
                 }
               >
                 {part.content}
@@ -188,17 +200,9 @@ export default function ChatInput({
               }, 0);
             }}
             onClick={handleClick}
-            placeholder=""
+            placeholder="Ask about your network..."
+            className="w-full p-3 rounded-xl bg-transparent border-transparent text-transparent placeholder:text-muted-foreground focus:placeholder:text-transparent caret-foreground focus:outline-none relative z-10 resize-none"
             rows={1}
-            className="w-full p-3 rounded-xl bg-transparent border-transparent text-transparent placeholder-transparent focus:outline-none relative z-10 resize-none"
-            style={{ 
-              caretColor: 'white',
-              color: 'transparent',
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              minHeight: '3rem',
-            }}
             disabled={isProcessing}
           />
         </div>
@@ -219,16 +223,18 @@ export default function ChatInput({
       {/* Prompt Suggestions */}
       {showSuggestions && inputValue.length === 0 && !isProcessing && (
         <div className="absolute bottom-full mb-8 flex flex-wrap gap-2">
-          {suggestions.map((item, index) => (
-            <Button
-              key={index}
-              variant="outline"
-              size="sm"
-              onClick={() => handleSuggestionClick(item)}
-              className="text-slate-300 border-slate-700/50 hover:bg-slate-800/50 hover:text-white"
+          {suggestions.map((s, i) => (
+            <motion.button
+              key={i}
+              onClick={() => handleSuggestionClick(s)}
+              className="h-9 px-3 rounded-md border border-input bg-background text-sm text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              variants={suggestionVariants}
+              initial="hidden"
+              animate="visible"
+              custom={i}
             >
-              {item}
-            </Button>
+              {s}
+            </motion.button>
           ))}
         </div>
       )}

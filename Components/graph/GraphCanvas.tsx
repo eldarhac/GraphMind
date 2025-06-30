@@ -5,12 +5,30 @@ type LinkObject = any;
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
+import { useTheme } from '../ui/ThemeProvider';
 
 const CENTRAL_USER_ID = "eldar-refael-hacohen-58b4b018a";
 
-const CONNECTION_TYPE_COLOR: Record<string, string> = {
-  WORK: '#FFC107',
-  STUDY: '#F44336',
+const lightColors = {
+    background: 'hsl(240 10% 99%)',
+    node: 'hsl(215 28% 92%)',
+    centralNode: 'hsl(217 91% 60%)',
+    highlight: '#22c55e',
+    text: 'hsl(222 47% 11%)',
+    initialsText: 'hsl(215 20% 55%)',
+    work: '#FFC107',
+    study: '#F44336',
+};
+
+const darkColors = {
+    background: 'hsl(225 15% 9%)',
+    node: 'hsl(217 33% 17%)',
+    centralNode: 'hsl(217 91% 60%)',
+    highlight: '#22c55e',
+    text: 'hsl(210 20% 98%)',
+    initialsText: 'hsl(210 40% 98%)',
+    work: '#FFC107',
+    study: '#F44336',
 };
 
 // Re-exporting for clarity in this component
@@ -121,6 +139,9 @@ export default function GraphCanvas({
     return { nodes: graphNodes, links: graphLinks };
   }, [nodes, connections, highlightedNodeIds, highlightedConnections, avatarImages]);
   
+  const { theme } = useTheme();
+  const canvasColors = useMemo(() => (theme === 'dark' ? darkColors : lightColors), [theme]);
+
   useEffect(() => {
     if (fgRef.current) {
       fgRef.current.d3Force('link').distance((link: any) => {
@@ -159,13 +180,13 @@ export default function GraphCanvas({
     ctx.beginPath();
     ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
     if (isHighlighted) {
-      ctx.fillStyle = '#22c55e';
+      ctx.fillStyle = canvasColors.highlight;
       ctx.shadowColor = '#4ade80';
       ctx.shadowBlur = 15;
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 2;
     } else {
-      ctx.fillStyle = isCentralNode ? 'rgb(51, 65, 85)' : 'rgba(51,65,85,0.5)';
+      ctx.fillStyle = isCentralNode ? canvasColors.centralNode : canvasColors.node;
     }
     ctx.fill();
     if (isHighlighted) {
@@ -190,7 +211,7 @@ export default function GraphCanvas({
         ctx.font = `${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#F8FAFC';
+        ctx.fillStyle = canvasColors.initialsText;
         ctx.fillText(initials, x!, y!);
     }
 
@@ -200,10 +221,10 @@ export default function GraphCanvas({
       ctx.font = `${fontSize}px Inter, sans-serif`;
       ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#F8FAFC';
+      ctx.fillStyle = canvasColors.text;
       ctx.fillText(label, x!, y! + radius + fontSize);
         }
-  }, []);
+  }, [canvasColors]);
 
   const linkCanvasObject = useCallback((link: LinkObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const graphLink = link as GraphLink;
@@ -224,7 +245,7 @@ export default function GraphCanvas({
       return;
     }
     
-    const color = graphLink.isHighlighted ? '#22c55e' : CONNECTION_TYPE_COLOR[graphLink.type];
+    const color = graphLink.isHighlighted ? canvasColors.highlight : (graphLink.type === 'WORK' ? canvasColors.work : canvasColors.study);
     const width = graphLink.isHighlighted ? 3 : 1;
 
     // Arched path
@@ -247,7 +268,7 @@ export default function GraphCanvas({
     ctx.globalAlpha = graphLink.isHighlighted ? 1 : 0.6;
     ctx.stroke();
     ctx.globalAlpha = 1;
-  }, []);
+  }, [canvasColors]);
 
   const nodePointerAreaPaint = useCallback((node: NodeObject, color: string, ctx: CanvasRenderingContext2D) => {
     const graphNode = node as GraphNode;
@@ -272,13 +293,13 @@ export default function GraphCanvas({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-slate-950 rounded-2xl border border-slate-700/50 overflow-hidden">
+    <div ref={containerRef} className="relative w-full h-full bg-background rounded-2xl border border-border overflow-hidden">
       <ForceGraph2D
         ref={fgRef}
         width={size.width}
         height={size.height}
         graphData={graphData}
-        backgroundColor="#0F172A"
+        backgroundColor={canvasColors.background}
         nodeCanvasObject={nodeCanvasObject}
         nodePointerAreaPaint={nodePointerAreaPaint}
         linkCanvasObject={linkCanvasObject}
@@ -297,7 +318,7 @@ export default function GraphCanvas({
           variant="ghost"
           size="icon"
           onClick={() => fgRef.current?.zoom(fgRef.current.zoom() + 0.2, 500)}
-          className="w-10 h-10 rounded-xl bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 text-slate-300 hover:text-white"
+          className="w-10 h-10 rounded-xl bg-card/80 backdrop-blur-sm border-border text-muted-foreground hover:text-foreground"
         >
           <ZoomIn className="w-4 h-4" />
         </Button>
@@ -305,7 +326,7 @@ export default function GraphCanvas({
           variant="ghost"
           size="icon"
           onClick={() => fgRef.current?.zoom(fgRef.current.zoom() - 0.2, 500)}
-          className="w-10 h-10 rounded-xl bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 text-slate-300 hover:text-white"
+          className="w-10 h-10 rounded-xl bg-card/80 backdrop-blur-sm border-border text-muted-foreground hover:text-foreground"
         >
           <ZoomOut className="w-4 h-4" />
         </Button>
@@ -313,39 +334,41 @@ export default function GraphCanvas({
           variant="ghost"
           size="icon"
           onClick={resetView}
-          className="w-10 h-10 rounded-xl bg-slate-800/80 backdrop-blur-sm border border-slate-700/50 text-slate-300 hover:text-white"
+          className="w-10 h-10 rounded-xl bg-card/80 backdrop-blur-sm border-border text-muted-foreground hover:text-foreground"
         >
           <Maximize className="w-4 h-4" />
         </Button>
       </div>
 
       {/* Graph Stats */}
-      <div className="absolute bottom-4 left-4 bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 px-4 py-2">
-        <div className="text-sm text-slate-300">
-          <span className="text-blue-400 font-medium">{nodes.length}</span> nodes • 
-          <span className="text-indigo-400 font-medium ml-1">{connections.length}</span> connections
+      <div className="absolute bottom-4 left-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border px-4 py-2">
+        <div className="text-sm text-muted-foreground">
+          <span className="text-primary font-medium">{nodes.length}</span> nodes • 
+          <span className="text-primary font-medium ml-1">{connections.length}</span> connections
         </div>
       </div>
 
       {/* Connection Legend */}
-      <div className="absolute bottom-4 right-4 bg-slate-800/80 backdrop-blur-sm rounded-xl border border-slate-700/50 px-4 py-2">
-        <h4 className="font-semibold text-xs text-slate-400 uppercase tracking-wider mb-2">Connection Legend</h4>
+      <div className="absolute bottom-4 right-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border px-4 py-2">
+        <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Connection Legend</h4>
         <div className="space-y-1">
-          {Object.entries(CONNECTION_TYPE_COLOR).map(([type, color]) => (
-            <div key={type} className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }}></div>
-              <span className="text-sm text-slate-300 capitalize">{type.toLowerCase()}</span>
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: canvasColors.work }}></div>
+              <span className="text-sm text-muted-foreground capitalize">Work</span>
             </div>
-          ))}
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: canvasColors.study }}></div>
+              <span className="text-sm text-muted-foreground capitalize">Study</span>
+            </div>
         </div>
       </div>
 
       {/* Loading State */}
       {nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
           <div className="text-center">
-            <div className="w-12 h-12 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-400">Loading network graph...</p>
+            <div className="w-12 h-12 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading network graph...</p>
           </div>
         </div>
       )}
