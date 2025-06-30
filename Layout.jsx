@@ -88,16 +88,19 @@ export default function Layout({ children }) {
         <header className="fixed top-0 left-20 right-0 h-20 px-8 flex items-center justify-between bg-card/80 backdrop-blur-xl z-30 border-b border-border">
           <div className="text-center invisible">
             {/* This is a spacer, the real title is centered below */}
-            <h1 className="text-4xl font-bold text-center">Graphoscope</h1>
+            <h1 className="text-5xl font-bold text-center">Promatheia</h1>
           </div>
           <div className="absolute left-1/2 -translate-x-1/2">
-            <h1 className="text-4xl font-bold text-foreground text-center">Graphoscope</h1>
+            <h1 className="text-5xl font-bold text-foreground text-center">Promatheia</h1>
             <p className="text-sm text-muted-foreground text-center">An AI That Sees What LinkedIn Can't</p>
           </div>
           <div>
             <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="text-muted-foreground">
-                <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                {theme === 'dark' ? (
+                    <Sun className="h-[1.2rem] w-[1.2rem]" />
+                ) : (
+                    <Moon className="h-[1.2rem] w-[1.2rem]" />
+                )}
                 <span className="sr-only">Toggle theme</span>
             </Button>
           </div>
