@@ -7,8 +7,6 @@ import { Button } from "@/Components/ui/button";
 import { Person, Connection } from '@/Entities/all';
 import { useTheme } from '../ui/ThemeProvider';
 
-const CENTRAL_USER_ID = "eldar-refael-hacohen-58b4b018a";
-
 const lightColors = {
     background: 'hsl(240 10% 99%)',
     node: 'hsl(215 28% 92%)',
@@ -35,6 +33,7 @@ const darkColors = {
 type GraphNode = NodeObject & Person & { 
   isHighlighted?: boolean;
   avatarImg?: HTMLImageElement;
+  level?: number;
 };
 
 type GraphLink = LinkObject & Connection & { 
@@ -103,62 +102,120 @@ export default function GraphCanvas({
     return () => { isMounted = false; };
   }, [nodes]);
 
+  const MAX_LEVEL = 4;
+
+  const egoGraphData = useMemo(() => {
+    if (!nodes.length || !currentUser) {
+        return { nodes: [], links: [] };
+    }
+    const centralNodeId = currentUser.id;
+    const centralNodeExists = nodes.some(n => n.id === centralNodeId);
+    if (!centralNodeExists) {
+        return { nodes: [], links: [] };
+    }
+
+    const nodesWithLevels = new Map<string, GraphNode>();
+    const queue: { nodeId: string; level: number }[] = [{ nodeId: centralNodeId, level: 0 }];
+    const visited = new Set<string>([centralNodeId]);
+
+    let head = 0;
+    while (head < queue.length) {
+        const { nodeId, level } = queue[head++];
+        const nodeData = nodes.find(n => n.id === nodeId);
+        if(nodeData) {
+           nodesWithLevels.set(nodeId, { ...nodeData, level });
+        }
+
+        if (level >= MAX_LEVEL) continue;
+
+        connections.forEach(conn => {
+            if (conn.person_a_id === nodeId || conn.person_b_id === nodeId) {
+                const neighborId = conn.person_a_id === nodeId ? conn.person_b_id : conn.person_a_id;
+                if (!visited.has(neighborId)) {
+                    const neighborNode = nodes.find(n => n.id === neighborId);
+                    if(neighborNode){
+                        visited.add(neighborId);
+                        queue.push({ nodeId: neighborId, level: level + 1 });
+                    }
+                }
+            }
+        });
+    }
+
+    const subgraphNodes = Array.from(nodesWithLevels.values());
+    const subgraphNodeIds = new Set(subgraphNodes.map(n => n.id));
+
+    const subgraphLinks = connections
+        .filter(conn => subgraphNodeIds.has(conn.person_a_id) && subgraphNodeIds.has(conn.person_b_id))
+        .map(c => ({
+            ...c,
+            source: c.person_a_id,
+            target: c.person_b_id,
+            isHighlighted: highlightedConnections.includes(c.id),
+            type: c.connection_type,
+        }));
+    
+    return { nodes: subgraphNodes, links: subgraphLinks };
+
+  }, [nodes, connections, currentUser, highlightedConnections]);
+
   const graphData = useMemo(() => {
-    const graphNodes: GraphNode[] = nodes.map(p => {
-      const node: GraphNode = {
-      ...p,
-      id: p.id,
-      isHighlighted: highlightedNodeIds.includes(p.id),
-      avatarImg: avatarImages[p.id],
-      };
-      if (p.id === CENTRAL_USER_ID) {
-        node.fx = 0;
-        node.fy = 0;
-      }
-      return node;
+    const { nodes: egoNodes, links: egoLinks } = egoGraphData;
+    if (!egoNodes.length) return { nodes: [], links: [] };
+    
+    const levelRadii = [0, 120, 240, 360, 480];
+
+    const nodesByLevel: { [level: number]: GraphNode[] } = {};
+    egoNodes.forEach(node => {
+        const level = node.level ?? 0;
+        if (!nodesByLevel[level]) {
+            nodesByLevel[level] = [];
+        }
+        nodesByLevel[level].push(node);
+    });
+    
+    const positionedNodes = egoNodes.map(node => {
+        const newNode = { ...node };
+        const level = newNode.level ?? 0;
+        
+        if (level === 0) {
+            newNode.fx = 0;
+            newNode.fy = 0;
+            return newNode;
+        }
+
+        const radius = levelRadii[level] || levelRadii[levelRadii.length - 1];
+        const levelNodes = nodesByLevel[level];
+        const nodeIndex = levelNodes.findIndex(n => n.id === newNode.id);
+        const angle = (2 * Math.PI * nodeIndex) / levelNodes.length;
+
+        newNode.fx = radius * Math.cos(angle);
+        newNode.fy = radius * Math.sin(angle);
+
+        return newNode;
     });
 
-    // Filter out connections that reference non-existent nodes
-    const nodeIds = new Set(graphNodes.map(n => n.id));
-    const validConnections = connections.filter(conn => 
-      nodeIds.has(conn.person_a_id) && nodeIds.has(conn.person_b_id)
-    );
-
-    const graphLinks: GraphLink[] = validConnections.map(c => ({
-      ...c,
-      source: c.person_a_id,
-      target: c.person_b_id,
-      isHighlighted: highlightedConnections.includes(c.id),
-      type: c.connection_type, // Map connection_type to type for consistency
+    const graphNodesWithAvatars = positionedNodes.map(p => ({
+      ...p,
+      isHighlighted: highlightedNodeIds.includes(p.id),
+      avatarImg: avatarImages[p.id],
     }));
+    
+    graphNodesWithAvatars.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
+    egoLinks.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
 
-    // Sort to bring highlighted elements to the front (drawn last)
-    graphNodes.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
-    graphLinks.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
 
-    return { nodes: graphNodes, links: graphLinks };
-  }, [nodes, connections, highlightedNodeIds, highlightedConnections, avatarImages]);
+    return { nodes: graphNodesWithAvatars, links: egoLinks };
+  }, [egoGraphData, avatarImages, highlightedNodeIds, highlightedConnections]);
   
   const { theme } = useTheme();
   const canvasColors = useMemo(() => (theme === 'dark' ? darkColors : lightColors), [theme]);
-
-  useEffect(() => {
-    if (fgRef.current) {
-      fgRef.current.d3Force('link').distance((link: any) => {
-        const isConnectedToCenter = link.source.id === CENTRAL_USER_ID || link.target.id === CENTRAL_USER_ID;
-        return isConnectedToCenter ? 250 : 100;
-      });
-      fgRef.current.d3Force('charge').strength(-200);
-    }
-  }, [graphData]);
 
   const handleNodeClick = useCallback((node: NodeObject) => {
     if (onNodeClick) {
       onNodeClick(node.id);
     }
 
-    // Defer the animation and position calculation to allow the state to update
-    // and to ensure graph engine has settled on coordinates.
     setTimeout(() => {
         if (fgRef.current && typeof node.x === 'number' && typeof node.y === 'number') {
             fgRef.current.centerAt(node.x, node.y, 1000);
@@ -169,14 +226,16 @@ export default function GraphCanvas({
 
   const nodeCanvasObject = useCallback((node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const graphNode = node as GraphNode;
-    const { x, y, name, isHighlighted, avatarImg, id } = graphNode;
+    const { x, y, name, isHighlighted, avatarImg, level } = graphNode;
 
-    const isCentralNode = id === CENTRAL_USER_ID;
-    const baseRadius = isCentralNode ? 80 : 5;
-    const radius = isHighlighted ? baseRadius * 1.2 : baseRadius;
+    const nodeLevel = level ?? 0;
+    const isCentralNode = nodeLevel === 0;
+
+    const radii = [30, 1, 1, 1, 1];
+    let radius = isHighlighted ? (radii[nodeLevel] ?? 1) * 1.2 : (radii[nodeLevel] ?? 1);
+    
     const label = name || '';
 
-    // Draw Node Circle
     ctx.beginPath();
     ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
     if (isHighlighted) {
@@ -194,10 +253,9 @@ export default function GraphCanvas({
       ctx.shadowBlur = 0;
     }
 
-    // Draw avatar image
     if (avatarImg && avatarImg.complete && avatarImg.naturalWidth > 0) {
       ctx.save();
-      ctx.globalAlpha = (isHighlighted || isCentralNode) ? 1 : 0.6;
+      ctx.globalAlpha = (isHighlighted || isCentralNode) ? 1 : 0.8;
       ctx.beginPath();
       ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
       ctx.clip();
@@ -205,9 +263,8 @@ export default function GraphCanvas({
       ctx.restore();
       ctx.globalAlpha = 1;
     } else {
-        // Fallback to initials if no image
         const initials = name?.split(/\s+/).map((w: string) => w[0]).join('').toUpperCase().slice(0, 2) || '';
-        const fontSize = radius;
+        const fontSize = radius * 0.8;
         ctx.font = `${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -215,8 +272,7 @@ export default function GraphCanvas({
         ctx.fillText(initials, x!, y!);
     }
 
-    // Draw label when zoomed in
-    if (globalScale > 1.5) {
+    if (globalScale > 7) {
       const fontSize = 12 / globalScale;
       ctx.font = `${fontSize}px Inter, sans-serif`;
       ctx.textAlign = 'center';
@@ -228,57 +284,47 @@ export default function GraphCanvas({
 
   const linkCanvasObject = useCallback((link: LinkObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
     const graphLink = link as GraphLink;
-    // Type guard to ensure we have node objects, not just IDs
     const sourceNode = typeof graphLink.source === 'object' ? graphLink.source as unknown as GraphNode : null;
     const targetNode = typeof graphLink.target === 'object' ? graphLink.target as unknown as GraphNode : null;
 
-    // Guard clause to ensure both nodes and their coordinates are valid
     if (!sourceNode || !targetNode || sourceNode.x === undefined || sourceNode.y === undefined || targetNode.x === undefined || targetNode.y === undefined) {
-      return; // Skip drawing this link if data is not ready
+      return; 
     }
 
     const { x: sx, y: sy } = sourceNode;
     const { x: tx, y: ty } = targetNode;
     
-    // Only draw WORK and STUDY connections
     if (graphLink.type !== 'WORK' && graphLink.type !== 'STUDY') {
       return;
     }
     
     const color = graphLink.isHighlighted ? canvasColors.highlight : (graphLink.type === 'WORK' ? canvasColors.work : canvasColors.study);
-    const width = graphLink.isHighlighted ? 3 : 1;
+    const width = graphLink.isHighlighted ? 2 : 0.5;
 
-    // Arched path
-    const dx = tx - sx;
-    const dy = ty - sy;
-    const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-    const offset = distance * 0.2;
-    const mx = (sx + tx) / 2;
-    const my = (sy + ty) / 2;
-    const nx = -dy / distance;
-    const ny = dx / distance;
-    const cpx = mx + nx * offset;
-    const cpy = my + ny * offset;
+    const linkLevel = Math.max(sourceNode.level ?? 0, targetNode.level ?? 0);
+    const opacities = [1, 0.7, 0.3, 0.15, 0.1];
+    const opacity = opacities[linkLevel] ?? 0.1;
 
     ctx.beginPath();
     ctx.moveTo(sx, sy);
-    ctx.quadraticCurveTo(cpx, cpy, tx, ty);
+    ctx.lineTo(tx, ty);
     ctx.strokeStyle = color;
     ctx.lineWidth = width / globalScale;
-    ctx.globalAlpha = graphLink.isHighlighted ? 1 : 0.6;
+    ctx.globalAlpha = graphLink.isHighlighted ? 1 : opacity;
     ctx.stroke();
     ctx.globalAlpha = 1;
   }, [canvasColors]);
 
   const nodePointerAreaPaint = useCallback((node: NodeObject, color: string, ctx: CanvasRenderingContext2D) => {
     const graphNode = node as GraphNode;
-    const { x, y, id } = graphNode;
+    const { x, y, level } = graphNode;
 
     if (x === undefined || y === undefined) return;
 
-    const isCentralNode = id === CENTRAL_USER_ID;
-    const baseRadius = isCentralNode ? 80 : 5;
-    const interactiveRadius = isCentralNode ? baseRadius * 1.5 : baseRadius;
+    const nodeLevel = level ?? 0;
+    const radii = [30, 1, 1, 1, 1];
+    const radius = radii[nodeLevel] ?? 1;
+    const interactiveRadius = radius * 1.5;
 
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -306,7 +352,7 @@ export default function GraphCanvas({
         linkCanvasObjectMode={() => "replace"}
         onNodeClick={handleNodeClick}
         onBackgroundClick={onBackgroundClick}
-        cooldownTicks={100}
+        cooldownTicks={0}
         onEngineStop={() => fgRef.current?.zoomToFit(400, 50)}
         enableZoomInteraction
         enablePanInteraction
