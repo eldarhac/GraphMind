@@ -88,10 +88,10 @@ export default function Layout({ children }) {
         <header className="fixed top-0 left-20 right-0 h-20 px-8 flex items-center justify-between bg-card/80 backdrop-blur-xl z-30 border-b border-border">
           <div className="text-center invisible">
             {/* This is a spacer, the real title is centered below */}
-            <h1 className="text-4xl font-bold">Graphoscope</h1>
+            <h1 className="text-4xl font-bold text-center">Graphoscope</h1>
           </div>
           <div className="absolute left-1/2 -translate-x-1/2">
-            <h1 className="text-4xl font-bold text-foreground">Graphoscope</h1>
+            <h1 className="text-4xl font-bold text-foreground text-center">Graphoscope</h1>
             <p className="text-sm text-muted-foreground text-center">An AI That Sees What LinkedIn Can't</p>
           </div>
           <div>
