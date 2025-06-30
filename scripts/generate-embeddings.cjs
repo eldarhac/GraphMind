@@ -42,8 +42,18 @@ async function generateAndStoreEmbeddings() {
     const position = participant.position || '';
     
     // Convert structured experience/education to a descriptive string
-    const experienceString = Array.isArray(participant.experience) ? participant.experience.map(exp => `${exp.title} at ${exp.company}`).join(', ') : (participant.experience || '');
-    const educationString = Array.isArray(participant.education) ? participant.education.map(edu => `${edu.degree} from ${edu.school}`).join(', ') : (JSON.stringify(participant.education) || '');
+    let experience = participant.experience;
+    if (typeof experience === 'string') {
+        try { experience = JSON.parse(experience); } catch (e) { experience = []; }
+    }
+    const experienceString = Array.isArray(experience) ? experience.map(exp => `${exp.title} at ${exp.company}`).join(', ') : '';
+
+    let education = participant.education;
+    if (typeof education === 'string') {
+        try { education = JSON.parse(education); } catch (e) { education = []; }
+    }
+    const educationString = Array.isArray(education) ? education.map(edu => `${edu.degree} from ${edu.school}`).join(', ') : '';
+
     const publicationsString = Array.isArray(participant.publications) ? participant.publications.map(pub => pub.title).join(', ') : (participant.publications || '');
     
     // 2. Construct the document, giving more weight to education and experience

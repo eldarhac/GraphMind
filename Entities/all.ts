@@ -24,8 +24,46 @@ export interface Person {
   layoutType?: 'core' | 'satellite';
   /** Number of connections used when categorizing layout type */
   degree?: number;
-  experience?: any[];
-  education?: any[];
+  experience?: Experience[];
+  education?: Education[];
+}
+
+export interface Experience {
+  title: string;
+  company?: string;
+  institution?: string; // Can be used for non-company affiliations
+  description?: string;
+  start_year?: number | string;
+  end_year?: number | string;
+  start_date?: string;
+  end_date?: string;
+  type?: 'WORK' | 'STUDY' | 'VOLUNTEERING'; // Example types
+  positions?: Position[];
+  url?: string;
+  location?: string;
+  company_id?: string;
+  company_logo_url?: string;
+  description_html?: string;
+  duration?: string;
+}
+
+export interface Position {
+    title: string;
+    start_date?: string;
+    end_date?: string;
+    location?: string;
+    description?: string;
+    description_html?: string;
+    meta?: string;
+    subtitle?: string;
+}
+
+export interface Education {
+    degree: string;
+    school: string;
+    title?: string; // 'title' seems to be used for school in some places
+    start_year?: number | string;
+    end_year?: number | string;
 }
 
 export interface Connection {

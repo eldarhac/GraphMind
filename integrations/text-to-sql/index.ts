@@ -1,40 +1,89 @@
 import { InvokeLLM } from '../invoke-llm';
 import { executeSql } from '../supabase-client';
 
-const SYSTEM_PROMPT = `
-You are an expert at converting natural language questions into precise, single-line PostgreSQL queries.
+export async function processTextToSqlQuery(query: string): Promise<string> {
+    const tableSchema = `
+      Table: participants2
+      Columns for Querying:
+      - name: TEXT (The full name of the person)
+      - experience: JSONB (Array of past jobs, each with a "company" key. e.g., [{"company": "Google", "title": "Engineer"}])
+      - education: JSONB (Array of educational institutions, each with a "school" key. e.g., [{"school": "MIT", "degree": "BS"}])
 
-The user is querying a table named "participants2". Here is the relevant schema:
-- id: uuid (Primary Key)
-- name: text
-- title: text
-- experience: jsonb (can contain an array of objects with a "company" key)
-- education: jsonb (can contain an array of objects with an "institution" key)
+      **CRITICAL QUERYING RULES:**
+      1.  **"Who worked at [Company]?"**: Find people whose 'experience' contains the company.
+          - Use: \`jsonb_path_exists(experience, '$[*] ? (@.company like_regex "[Company]" flag "i")')\`
+          - Example: SELECT name FROM participants2 WHERE jsonb_path_exists(experience, '$[*] ? (@.company like_regex "Google" flag "i")')
 
-**CRITICAL RULES:**
-1.  **Always query the "participants2" table.**
-2.  **Your entire output must be a single, valid PostgreSQL SELECT query on a single line.** Do not use semicolons or newlines.
-3.  When a user asks "where" someone studied or worked, you MUST query the 'education' or 'experience' columns respectively.
-4.  To query inside the 'education' or 'experience' JSONB columns, you MUST use the \`jsonb_path_exists\` function. This is the only way to handle both single objects and arrays of objects safely.
+      2.  **"Who studied at [School]?"**: Find people whose 'education' contains the school.
+          - Use: \`jsonb_path_exists(education, '$[*] ? (@.school like_regex "[School]" flag "i")')\`
+          - Example: SELECT name FROM participants2 WHERE jsonb_path_exists(education, '$[*] ? (@.school like_regex "MIT" flag "i")')
 
-**EXAMPLE - How to find where a person studied:**
-User Question: "Where did Dennis Lee study?"
-Your SQL Query: SELECT education FROM participants2 WHERE name ILIKE '%Dennis Lee%'
+      3.  **"Where did [Person] study/work?"**: Retrieve the 'education' or 'experience' data for a specific person.
+          - Use: \`ILIKE\` on the 'name' column.
+          - Example: SELECT education FROM participants2 WHERE name ILIKE '%Sandra Buchanan%'
 
-**EXAMPLE - How to find who worked at a company:**
-User Question: "Who worked at Google?"
-Your SQL Query: SELECT name, title FROM participants2 WHERE jsonb_path_exists(experience, '$[*] ? (@.company like_regex "Google" flag "i")')
+      **Your Task:**
+      -   You MUST generate a single-line, valid PostgreSQL SELECT query based on the user's question.
+      -   Do not use semicolons or newlines.
+      -   Output only the raw SQL query.
+    `;
 
--   Based on these strict rules and examples, generate the SQL query for the user's question.
--   Do NOT generate any query that modifies the database (INSERT, UPDATE, DELETE, etc.).
--   **Output only the raw SQL query.**
-`;
+    const prompt = `
+        You are an expert SQL generator. Your task is to convert the following natural language query into a single-line PostgreSQL query.
+        You MUST follow the provided schema and querying rules precisely.
+
+        **Schema & Rules:**
+        ${tableSchema}
+
+        **User Query:**
+        "${query}"
+
+        **SQL Query:**
+    `;
+
+    try {
+        const rawResponse = await InvokeLLM({ prompt });
+
+        let sqlQuery = String(rawResponse);
+
+        // The LLM often wraps the SQL in a markdown block. Let's extract it.
+        const match = sqlQuery.match(/```(?:sql)?\n([\s\S]*?)\n```/);
+        if (match && match[1]) {
+            sqlQuery = match[1].trim();
+        }
+
+        // Before executing, perform a basic safety check.
+        const normalizedQuery = sqlQuery.trim().toUpperCase();
+        if (!normalizedQuery.startsWith('SELECT')) {
+            return "I can only process SELECT queries for safety reasons.";
+        }
+
+        const finalQuery = sqlQuery.replace(/;$/, '');
+        const results = await executeSql(finalQuery);
+
+        if (results.error) {
+            console.error(`Database error for query: ${finalQuery}`, results.error);
+            return `I encountered a database error. The failing query was: \`${finalQuery}\``;
+        }
+
+        if (!results.data || results.data.length === 0) {
+            return "I could not find any information matching your query in the database.";
+        }
+
+        // Now, generate a final, user-friendly answer.
+        const finalAnswer = await generateFinalAnswer(query, results.data);
+        return finalAnswer;
+    } catch (error: any) {
+        console.error('Error processing text-to-SQL:', error);
+        const failingQuery = error.metadata?.query || 'the generated SQL';
+        return `An error occurred. The failing query was: \`${failingQuery}\``;
+    }
+}
 
 async function generateFinalAnswer(question: string, data: any[]): Promise<string> {
     const prompt = `
-        You are a helpful assistant. You have been given the result of a SQL query and the original question.
-        Your task is to synthesize a natural, user-friendly answer based on the data.
-        The data is an array of objects.
+        You are a helpful assistant. Based on the user's question and the retrieved database data, provide a concise, natural language answer.
+        If the data is a complex JSON object, summarize it clearly. For example, if you get a JSON object with a list of schools, list them out.
 
         **Original Question:**
         "${question}"
@@ -46,93 +95,10 @@ async function generateFinalAnswer(question: string, data: any[]): Promise<strin
     `;
 
     try {
-        const finalAnswer = await InvokeLLM({ prompt: prompt });
+        const finalAnswer = await InvokeLLM({ prompt });
         return String(finalAnswer);
     } catch (error) {
         console.error("Error generating final answer:", error);
         return "I found the data, but I had trouble formulating a response.";
-    }
-}
-
-export async function processTextToSqlQuery(query: string): Promise<string> {
-    const tableSchema = `
-      Table: participants2
-      Relevant Columns:
-      - name: TEXT (The full name of the person)
-      - position: TEXT (Current job title)
-      - current_company: JSONB (An object with details about the current employer, e.g., {"name": "Google"})
-      - experience: TEXT (A string which can be NULL or a JSON array of PAST job experiences)
-      - education: JSONB (An array of educational institutions)
-
-      **CRITICAL QUERY RULES:**
-      1. For questions about CURRENT employment (e.g., "who works at Google?"), you MUST query the 'current_company' (jsonb) and 'position' (text) columns. Use the ->> operator to get text from the JSONB field.
-      2. For questions about PAST employment (e.g., "who used to work at OpenAI?"), you MUST query the 'experience' column. This column is TEXT and must be cast to 'jsonb'. It contains an array of jobs.
-      3. For education questions, query the 'education' column using 'jsonb_path_exists'.
-
-      **EXAMPLES:**
-      
-      User Question: "Who currently works at Google?"
-      Your SQL Query: SELECT name, position FROM participants2 WHERE current_company->>'name' ILIKE 'Google'
-
-      User Question: "Who is a product manager?"
-      Your SQL Query: SELECT name, current_company->>'name' as company FROM participants2 WHERE position ILIKE '%product manager%'
-
-      User Question: "Who used to work at Microsoft?"
-      Your SQL Query: SELECT name FROM participants2 WHERE experience IS NOT NULL AND experience != '' AND jsonb_path_exists(experience::jsonb, '$[*] ? (@.company like_regex "Microsoft" flag "i")')
-
-      User Question: "Who studied at MIT?"
-      Your SQL Query: SELECT name FROM participants2 WHERE jsonb_path_exists(education, '$[*] ? (@.school like_regex "MIT" flag "i")')
-    `;
-
-    const prompt = `
-        You are an expert SQL generator. Your task is to convert a natural language query into a valid SQL query for a PostgreSQL database.
-        You MUST use the provided table schema and MUST NOT invent table or column names.
-        The query should be a single-line SQL statement.
-
-        **Schema & Instructions:**
-        ${tableSchema}
-
-        **User Query:**
-        "${query}"
-
-        **SQL Query:**
-    `;
-
-    try {
-        const rawResponse = await InvokeLLM({ prompt: prompt });
-
-        let sqlQuery = String(rawResponse);
-
-        // The LLM often wraps the SQL in a markdown block. Let's extract it.
-        // This regex handles both ```sql and ``` blocks.
-        const match = sqlQuery.match(/```(?:sql)?\n([\s\S]*?)\n```/);
-        if (match && match[1]) {
-            sqlQuery = match[1];
-        }
-
-        // Before executing, perform a basic safety check.
-        const normalizedQuery = sqlQuery.trim().toUpperCase();
-        if (!normalizedQuery.startsWith('SELECT')) {
-            return "I can only process SELECT queries for safety reasons.";
-        }
-
-        const finalQuery = sqlQuery.trim().replace(/;$/, '');
-        const results = await executeSql(finalQuery);
-
-        if (results.error) {
-            return `Database error: ${results.error}. The failing query was: \`${finalQuery}\``;
-        }
-
-        if (!results.data || results.data.length === 0) {
-            return "I could not find any information matching your query in the database.";
-        }
-
-        // Now, generate a final, user-friendly answer.
-        const finalAnswer = await generateFinalAnswer(query, results.data);
-        return finalAnswer;
-    } catch (error: any) {
-        console.error('Database error:', error.message);
-        const failingQuery = error.metadata?.query || 'the generated SQL';
-        return `Database error: ${error.message}. The failing query was: \`${failingQuery}\``;
     }
 } 

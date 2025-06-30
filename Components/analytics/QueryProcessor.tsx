@@ -1,5 +1,5 @@
 import { InvokeLLM } from '@/integrations/Core';
-import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage, FindPotentialConnectionsResult, ExplainSimilarityResult } from '@/Entities/all';
+import { Person, Connection, IntentData, GraphResults, FindPathResult, RankNodesResult, RecommendPersonsResult, FindSimilarResult, FindBridgeResult, SelectNodeResult, ChatMessage, FindPotentialConnectionsResult, ExplainSimilarityResult, Experience, Education } from '@/Entities/all';
 import { processTextToSqlQuery } from '@/integrations/text-to-sql';
 import { queryGraph, answerQuestionAboutPerson } from '@/integrations/graph-qa';
 import { supabaseClient } from '@/integrations/supabase-client';
@@ -166,6 +166,13 @@ export default class QueryProcessor {
             } else if (paramValue.startsWith('@')) {
                 toolParams[key] = paramValue.substring(1);
             }
+        }
+      }
+      
+      // Sanitize @mentions from question strings
+      if (toolName === "answer_relational_question" || toolName === "answer_graph_question") {
+        if (toolParams.question && typeof toolParams.question === 'string') {
+          toolParams.question = toolParams.question.replace(/@/g, '');
         }
       }
       
@@ -688,40 +695,50 @@ export default class QueryProcessor {
     }
 
     // Now, generate the explanation using an LLM.
-    const experienceStringA = Array.isArray(personADetails.experience)
-        ? personADetails.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
-        : 'No experience data available.';
-    const educationStringA = Array.isArray(personADetails.education)
-        ? personADetails.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
-        : 'No education data available.';
-
-    const experienceStringB = Array.isArray(personBDetails.experience)
-        ? personBDetails.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
-        : 'No experience data available.';
-    const educationStringB = Array.isArray(personBDetails.education)
-        ? personBDetails.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
-        : 'No education data available.';
+    const experienceA = personADetails.experience ? JSON.stringify(personADetails.experience, null, 2) : '[]';
+    const educationA = personADetails.education ? JSON.stringify(personADetails.education, null, 2) : '[]';
+    const experienceB = personBDetails.experience ? JSON.stringify(personBDetails.experience, null, 2) : '[]';
+    const educationB = personBDetails.education ? JSON.stringify(personBDetails.education, null, 2) : '[]';
 
     const prompt = `
         You are a professional analyst. Your task is to explain why ${personADetails.name} and ${personBDetails.name} have similar professional profiles, based ONLY on the data provided.
         Your response MUST use their full names. Do NOT use placeholders like "Person A" or "Person B".
 
+        The 'experience' and 'education' fields are provided as JSON arrays. You must parse them to analyze their contents.
+
+        'experience' JSON schema:
+        [{
+          "title": "Job Title",
+          "company": "Company Name",
+          "start_year": YYYY,
+          "end_year": YYYY | "Present"
+        }]
+
+        'education' JSON schema:
+        [{
+          "degree": "Degree Name",
+          "school": "School Name",
+          "start_year": YYYY,
+          "end_year": YYYY
+        }]
+
         **Information for ${personADetails.name}**:
         Title: ${personADetails.title}
         Experience:
-        ${experienceStringA}
+        ${experienceA}
         Education:
-        ${educationStringA}
+        ${educationA}
 
         **Information for ${personBDetails.name}**:
         Title: ${personBDetails.title}
         Experience:
-        ${experienceStringB}
+        ${experienceB}
         Education:
-        ${educationStringB}
+        ${educationB}
 
         **Analysis Task:**
-        Write a concise, 2-3 sentence explanation highlighting the key similarities in their careers, such as common industries, companies, or fields of study.
+        Write a concise, 2-3 sentence explanation highlighting the key similarities in their careers. You can compare their job titles, companies, industries, schools, or fields of study.
+        Look for overlaps in timelines or similar career trajectories.
         Remember to use their names, ${personADetails.name} and ${personBDetails.name}, in your response.
 
         **Generated Explanation:**
@@ -755,44 +772,98 @@ export default class QueryProcessor {
   }
 }
 
-export async function generateBioSummary(personData: { name: string, experience: any[], education: any[] }): Promise<string> {
-  // Convert the structured JSON data into a clean, readable string for the prompt
-  const experienceString = Array.isArray(personData.experience) 
-    ? personData.experience.map(exp => `- ${exp.title} at ${exp.company}`).join('\n')
-    : 'No experience data available.';
-  const educationString = Array.isArray(personData.education) 
-    ? personData.education.map(edu => `- ${edu.degree} from ${edu.school}`).join('\n')
-    : 'No education data available.';
+function formatYear(dateString?: string | number): string | null {
+  if (!dateString) return null;
+  const year = new Date(dateString).getFullYear();
+  return isNaN(year) ? String(dateString) : String(year);
+}
 
-  const prompt = `
-    You are a professional biographer. Your task is to write a concise, narrative summary (around 2-4 sentences) of ${personData.name}'s career and academic background, based ONLY on the data provided.
+export async function generateBioSummary(personData: { name:string; experience:Experience[]; education:Education[]; }): Promise<string> {
+    
+  let experience = personData.experience || [];
+  let education = personData.education || [];
 
-    **CRITICAL INSTRUCTION:** Your response MUST start directly with the person's name or a description of their career. DO NOT include any introductory phrases like "Here is a summary..." or "This is a summary of...".
-
-    **Example of what NOT to do:**
-    "Here is a summary of Jane Doe's career: Jane Doe started..."
-
-    **Example of what TO do:**
-    "Jane Doe began her career at..."
-
-    **Further Instructions:**
-    1. Weave together their key professional roles and educational achievements into a short story.
-    2. You MUST mention the names of companies and educational institutions from the data.
-
-    **Professional Experience:**
-    ${experienceString}
-
-    **Education:**
-    ${educationString}
-
-    **Generated Summary (2-4 sentences, narrative style, mentioning institutions, NO introduction):**
-  `;
-
-  try {
-    const summary = await InvokeLLM({ prompt: prompt });
-    return String(summary);
-  } catch (error) {
-    console.error("Error generating bio summary:", error);
-    return "Unable to generate a summary for this person at this time.";
+  // Defensively parse if data is a JSON string
+  if (typeof experience === 'string') {
+    try {
+      experience = JSON.parse(experience);
+    } catch (e) {
+      console.error("Failed to parse experience JSON string:", e);
+      experience = [];
+    }
   }
+  if (typeof education === 'string') {
+    try {
+      education = JSON.parse(education);
+    } catch (e) {
+      console.error("Failed to parse education JSON string:", e);
+      education = [];
+    }
+  }
+
+  const experienceItems = (Array.isArray(experience) ? experience : [])
+    .flatMap(exp => {
+        const company = exp.company || '';
+
+        if (exp.positions && Array.isArray(exp.positions) && exp.positions.length > 0) {
+            // This is a company with multiple roles
+            return exp.positions.map(pos => {
+                const title = pos.title || '';
+                const startDate = pos.start_date;
+                const endDate = pos.end_date || 'Present';
+                const datePart = startDate ? ` (${startDate} - ${endDate})` : '';
+
+                let line = '- ';
+                if (title) line += title;
+                if (company) line += ` at ${company}`;
+                line += datePart;
+                return line;
+            });
+        } else {
+            // This is a single role
+            const title = exp.title || '';
+            if (!title && !company) return null;
+
+            const startDate = exp.start_date;
+            const endDate = exp.end_date || 'Present';
+            const datePart = startDate ? ` (${startDate} - ${endDate})` : '';
+
+            let line = '- ';
+            if (title) line += title;
+            if (company) line += ` at ${company}`;
+            line += datePart;
+            return line;
+        }
+    })
+    .filter(Boolean);
+
+  const educationItems = (Array.isArray(education) ? education : [])
+    .map(edu => {
+      const degree = edu.degree || 'Degree';
+      const school = edu.school || edu.title; // 'title' field for school name
+      const startYear = formatYear(edu.start_year);
+      const endYear = formatYear(edu.end_year);
+      const datePart = startYear && endYear ? ` (${startYear} - ${endYear})` : (startYear ? ` (${startYear})` : '');
+      
+      let line = '- ';
+      if (degree && degree !== 'Degree') line += degree;
+      if (school) line += ` from ${school}`;
+      line += datePart;
+      
+      // Don't return just "- Degree" or an empty line with only a date
+      if (line.trim() === '- Degree' || (line.trim().startsWith('- (') && line.trim().endsWith(')'))) return null;
+
+      return line;
+    })
+    .filter(Boolean);
+
+  const summaryParts = [];
+  if (experienceItems.length > 0) {
+    summaryParts.push(`Work:\n${experienceItems.join('\n')}`);
+  }
+  if (educationItems.length > 0) {
+    summaryParts.push(`Education:\n${educationItems.join('\n')}`);
+  }
+  
+  return Promise.resolve(summaryParts.join('\n\n'));
 }

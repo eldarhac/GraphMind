@@ -102,7 +102,7 @@ async function getParticipantDetails(personName: string): Promise<Person[] | nul
     // Safely parse JSON string fields for each returned person
     const parsedData = data.map((person: any) => ({
       ...person,
-      current_com_experience: safeJsonParse(person.current_com_experience),
+      experience: safeJsonParse(person.experience),
       education: safeJsonParse(person.education),
       publications: safeJsonParse(person.publications),
     }));
@@ -114,15 +114,28 @@ async function getParticipantDetails(personName: string): Promise<Person[] | nul
   }
 }
 
-function safeJsonParse(jsonString: string | null | undefined): any[] {
-  if (!jsonString) return [];
-  try {
-    const parsed = JSON.parse(jsonString);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (e) {
-    console.warn('Failed to parse JSON string:', jsonString, e);
+function safeJsonParse(value: any): any[] {
+  if (!value) {
     return [];
   }
+  // If it's already an array, return it.
+  if (Array.isArray(value)) {
+    return value;
+  }
+  // If it's a string, try to parse it.
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      // Ensure the parsed result is an array.
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn('Failed to parse JSON string:', value, e);
+      return [];
+    }
+  }
+  // If it's some other type (like a single object that's not an array), return empty array.
+  // This is because we expect a list of experiences/educations.
+  return [];
 }
 
 // This function is no longer needed, as the logic will be moved into the database.

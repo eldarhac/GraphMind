@@ -444,7 +444,9 @@ Click on any person in the graph to mention them in your message!`,
                 {bioSummary.isLoading ? (
                   <p className="text-slate-400 text-sm animate-pulse">Generating summary...</p>
                 ) : (
-                  <p className="text-slate-300 text-sm leading-relaxed">{bioSummary.content}</p>
+                  <div className="max-h-36 overflow-y-auto pr-2">
+                    <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-line">{bioSummary.content}</p>
+                  </div>
                 )}
               </div>
 
