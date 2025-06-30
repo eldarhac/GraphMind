@@ -10,7 +10,7 @@ import { ThemeProvider } from './Components/ui/ThemeProvider';
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="graphmind-theme">
+    <ThemeProvider defaultTheme="light" storageKey="graphmind-theme">
       <StagewiseToolbar
         config={{
           plugins: [ReactPlugin],
