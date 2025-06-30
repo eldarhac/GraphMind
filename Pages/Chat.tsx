@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Person, Connection, ChatMessage } from "@/Entities/all";
 import { getHybridGraphData } from "@/services/hybridDataService";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import MessageBubble from "@/Components/chat/MessageBubble";
 import ChatInput from "@/Components/chat/ChatInput";
 import GraphCanvas from "@/Components/graph/GraphCanvas";
@@ -290,11 +290,11 @@ Click on any person in the graph to mention them in your message!`,
   };
 
   return (
-    <div className="h-screen flex">
+    <div className="h-[calc(100vh-5rem)] flex">
       {/* Chat Panel */}
       <div className="flex flex-col" style={{ width: `${100 - graphPanelWidth}%` }}>
         {/* Header */}
-        <div className="p-6 border-b border-slate-700/50 glass-effect">
+        <div className="h-20 px-6 flex items-center border-b border-slate-700/50 glass-effect">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
             <div>
@@ -339,12 +339,13 @@ Click on any person in the graph to mention them in your message!`,
         </div>
 
         {/* Input Area */}
-        <div className="p-6 border-t border-slate-700/50 glass-effect">
+        <div className="h-24 p-6 flex items-center border-t border-slate-700/50 glass-effect">
           <ChatInput 
             onSendMessage={handleSendMessage}
             isProcessing={isProcessing}
             pendingMention={pendingMention}
             onMentionInserted={handleMentionInserted}
+            showSuggestions={!messages.some(m => m.sender === 'user')}
           />
         </div>
       </div>
@@ -366,8 +367,8 @@ Click on any person in the graph to mention them in your message!`,
       {/* Graph Panel */}
       <div className="flex flex-col relative" style={{ width: `${graphPanelWidth}%` }}>
         {/* Header */}
-        <div className="p-6 border-b border-l border-slate-700/50 glass-effect">
-          <div className="flex items-center justify-between">
+        <div className="h-20 px-6 flex items-center border-b border-l border-slate-700/50 glass-effect">
+          <div className="flex items-center justify-between w-full">
             <h1 className="text-xl font-bold text-white">Network Graph</h1>
             <button onClick={toggleGraphPanel} className="text-slate-400 hover:text-white">
               {graphPanelWidth > 25 ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
@@ -432,6 +433,13 @@ Click on any person in the graph to mention them in your message!`,
       
               {/* --- SECTION 3: AI Summary (Existing Feature) --- */}
               <div>
+                <button
+                  onClick={() => {}}
+                  className="w-full text-left px-3 py-2 mb-4 rounded-lg text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 transition-colors flex items-center gap-2"
+                >
+                  <Mail size={16} />
+                  <span>Generate Reachout Email</span>
+                </button>
                 <h4 className="text-sm font-medium text-slate-400 mb-2 border-t border-slate-700/50 pt-4">AI-Generated Summary</h4>
                 {bioSummary.isLoading ? (
                   <p className="text-slate-400 text-sm animate-pulse">Generating summary...</p>

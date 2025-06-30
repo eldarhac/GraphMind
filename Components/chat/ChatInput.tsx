@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Mention } from '@/types/mentions';
@@ -8,23 +8,25 @@ interface ChatInputProps {
   isProcessing: boolean;
   pendingMention?: Mention | null;
   onMentionInserted?: () => void;
+  showSuggestions?: boolean;
 }
 
 export default function ChatInput({ 
   onSendMessage, 
   isProcessing, 
   pendingMention,
-  onMentionInserted
+  onMentionInserted,
+  showSuggestions = true
 }: ChatInputProps) {
   const [inputValue, setInputValue] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
 
   const suggestions = [
-    "Find path from me to Dr. Li",
+    "How can I reach Jeff Bezos?",
     "Who are the top AI researchers?",
-    "Show me people similar to Dr. Evelyn Reed",
-    "Who is a bridge between Quantum Computing and Robotics?",
+    "Show me people similar to Dr. Musk",
+    "Who is currently working at Google?"
   ];
 
   // Insert mention at cursor position when a new mention is pending
@@ -87,25 +89,6 @@ export default function ChatInput({
     }
   };
   
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    submitMessage();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      submitMessage();
-      return;
-    }
-    // Update cursor position for mention insertion
-    setTimeout(() => {
-      if (inputRef.current) {
-        setCursorPosition(inputRef.current.selectionStart || 0);
-      }
-    }, 0);
-  };
-
   const handleClick = () => {
     // Update cursor position when clicking in the input
     setTimeout(() => {
@@ -152,8 +135,14 @@ export default function ChatInput({
   };
 
   return (
-    <div>
-      <form onSubmit={handleSubmit} className="flex items-center gap-3">
+    <div className="w-full relative">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submitMessage();
+        }}
+        className="flex items-center gap-3 w-full"
+      >
         <div className="flex-1 relative">
           {/* Background container */}
           <div className="absolute inset-0 rounded-xl bg-slate-800/50 border border-slate-700/50 focus-within:ring-2 focus-within:ring-blue-500/50"></div>
@@ -184,8 +173,20 @@ export default function ChatInput({
           <textarea
             ref={inputRef}
             value={inputValue}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitMessage();
+                return;
+              }
+              // Update cursor position for mention insertion
+              setTimeout(() => {
+                if (inputRef.current) {
+                  setCursorPosition(inputRef.current.selectionStart || 0);
+                }
+              }, 0);
+            }}
             onClick={handleClick}
             placeholder=""
             rows={1}
@@ -216,8 +217,8 @@ export default function ChatInput({
       </form>
       
       {/* Prompt Suggestions */}
-      {inputValue.length === 0 && !isProcessing && (
-        <div className="mt-4 flex flex-wrap gap-2">
+      {showSuggestions && inputValue.length === 0 && !isProcessing && (
+        <div className="absolute bottom-full mb-8 flex flex-wrap gap-2">
           {suggestions.map((item, index) => (
             <Button
               key={index}

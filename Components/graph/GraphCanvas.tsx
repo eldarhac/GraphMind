@@ -114,6 +114,10 @@ export default function GraphCanvas({
       type: c.connection_type, // Map connection_type to type for consistency
     }));
 
+    // Sort to bring highlighted elements to the front (drawn last)
+    graphNodes.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
+    graphLinks.sort((a, b) => (a.isHighlighted ? 1 : 0) - (b.isHighlighted ? 1 : 0));
+
     return { nodes: graphNodes, links: graphLinks };
   }, [nodes, connections, highlightedNodeIds, highlightedConnections, avatarImages]);
   
@@ -155,9 +159,9 @@ export default function GraphCanvas({
     ctx.beginPath();
     ctx.arc(x!, y!, radius, 0, 2 * Math.PI, false);
     if (isHighlighted) {
-      ctx.fillStyle = '#3B82F6';
-      ctx.shadowColor = '#60A5FA';
-      ctx.shadowBlur = 10;
+      ctx.fillStyle = '#22c55e';
+      ctx.shadowColor = '#4ade80';
+      ctx.shadowBlur = 15;
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 2;
     } else {
@@ -220,8 +224,8 @@ export default function GraphCanvas({
       return;
     }
     
-    const color = CONNECTION_TYPE_COLOR[graphLink.type];
-    const width = graphLink.isHighlighted ? 2.5 : 1;
+    const color = graphLink.isHighlighted ? '#22c55e' : CONNECTION_TYPE_COLOR[graphLink.type];
+    const width = graphLink.isHighlighted ? 3 : 1;
 
     // Arched path
     const dx = tx - sx;

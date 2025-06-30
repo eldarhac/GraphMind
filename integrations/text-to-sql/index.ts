@@ -57,14 +57,31 @@ async function generateFinalAnswer(question: string, data: any[]): Promise<strin
 export async function processTextToSqlQuery(query: string): Promise<string> {
     const tableSchema = `
       Table: participants2
-      Columns:
+      Relevant Columns:
       - name: TEXT (The full name of the person)
-      - experience: TEXT (A string which can be NULL, empty, or contain a JSON array of job experiences, e.g., '[{"company": "Google", "title": "Software Engineer"}]')
+      - position: TEXT (Current job title)
+      - current_company: JSONB (An object with details about the current employer, e.g., {"name": "Google"})
+      - experience: TEXT (A string which can be NULL or a JSON array of PAST job experiences)
+      - education: JSONB (An array of educational institutions)
 
-      To query the 'experience' column, you MUST first cast it to JSONB.
-      You MUST also filter out NULL or empty strings before casting to avoid errors.
-      For example, to find people who worked at a company, you MUST use a query structured like this:
-      SELECT name FROM participants2 WHERE experience IS NOT NULL AND experience != '' AND jsonb_path_exists(experience::jsonb, '$[*] ? (@.company like_regex "some-company" flag "i")')
+      **CRITICAL QUERY RULES:**
+      1. For questions about CURRENT employment (e.g., "who works at Google?"), you MUST query the 'current_company' (jsonb) and 'position' (text) columns. Use the ->> operator to get text from the JSONB field.
+      2. For questions about PAST employment (e.g., "who used to work at OpenAI?"), you MUST query the 'experience' column. This column is TEXT and must be cast to 'jsonb'. It contains an array of jobs.
+      3. For education questions, query the 'education' column using 'jsonb_path_exists'.
+
+      **EXAMPLES:**
+      
+      User Question: "Who currently works at Google?"
+      Your SQL Query: SELECT name, position FROM participants2 WHERE current_company->>'name' ILIKE 'Google'
+
+      User Question: "Who is a product manager?"
+      Your SQL Query: SELECT name, current_company->>'name' as company FROM participants2 WHERE position ILIKE '%product manager%'
+
+      User Question: "Who used to work at Microsoft?"
+      Your SQL Query: SELECT name FROM participants2 WHERE experience IS NOT NULL AND experience != '' AND jsonb_path_exists(experience::jsonb, '$[*] ? (@.company like_regex "Microsoft" flag "i")')
+
+      User Question: "Who studied at MIT?"
+      Your SQL Query: SELECT name FROM participants2 WHERE jsonb_path_exists(education, '$[*] ? (@.school like_regex "MIT" flag "i")')
     `;
 
     const prompt = `
@@ -103,7 +120,7 @@ export async function processTextToSqlQuery(query: string): Promise<string> {
         const results = await executeSql(finalQuery);
 
         if (results.error) {
-            return `Database error: ${results.error.message}. The failing query was: \`${finalQuery}\``;
+            return `Database error: ${results.error}. The failing query was: \`${finalQuery}\``;
         }
 
         if (!results.data || results.data.length === 0) {

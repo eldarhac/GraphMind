@@ -71,11 +71,9 @@ export default function Layout({ children }) {
       <div className="fixed left-0 top-0 h-full w-20 glass-effect z-40 border-r border-slate-700/50">
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-4 border-b border-slate-700/50">
-            <div className="flex items-center justify-center">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center animate-float flex-shrink-0">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
+          <div className="h-20 p-4 flex items-center justify-center border-b border-slate-700/50">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center animate-float flex-shrink-0">
+              <Sparkles className="w-6 h-6 text-white" />
             </div>
           </div>
 
@@ -107,11 +105,9 @@ export default function Layout({ children }) {
           </nav>
 
           {/* User Profile */}
-          <div className="p-4 border-t border-slate-700/50">
-            <div className="flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-sm font-bold">U</span>
-              </div>
+          <div className="h-24 p-4 flex items-center justify-center border-t border-slate-700/50">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-sm font-bold">U</span>
             </div>
           </div>
         </div>
@@ -119,7 +115,15 @@ export default function Layout({ children }) {
 
       {/* Main Content */}
       <div className="ml-20 min-h-screen">
-        <main className="relative">
+        {/* Header Bar */}
+        <header className="fixed top-0 left-20 right-0 h-20 px-8 flex items-center justify-center glass-effect z-30 border-b border-slate-700/50">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-white text-glow">Graphoscope</h1>
+            <p className="text-sm text-slate-400">Your Personal Network Intelligence Engine</p>
+          </div>
+        </header>
+        
+        <main className="relative pt-20">
           {children}
         </main>
       </div>

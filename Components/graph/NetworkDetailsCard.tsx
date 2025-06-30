@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { X, User, AtSign } from 'lucide-react';
+import { X, User, AtSign, Mail } from 'lucide-react';
 import { Person } from '@/Entities/all';
 
 interface NetworkDetailsCardProps {
@@ -67,6 +67,13 @@ const NetworkDetailsCard: React.FC<NetworkDetailsCardProps> = ({
         >
           <AtSign size={16} />
           <span className="text-sm font-medium">mention in chat</span>
+        </button>
+        <button
+          onClick={() => {}}
+          className="w-full text-left flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors py-2 px-2 rounded-md hover:bg-slate-700/50"
+        >
+          <Mail size={16} />
+          <span className="text-sm font-medium">Generate Reachout Email</span>
         </button>
       </div>
 

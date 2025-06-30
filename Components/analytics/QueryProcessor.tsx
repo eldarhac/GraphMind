@@ -159,8 +159,13 @@ export default class QueryProcessor {
 
       // Sanitize params that might refer to the current user
       for (const key in toolParams) {
-        if (typeof toolParams[key] === 'string' && (toolParams[key].toLowerCase() === 'me' || toolParams[key].toLowerCase() === 'i')) {
-          toolParams[key] = currentUser.name;
+        if (typeof toolParams[key] === 'string') {
+            const paramValue = toolParams[key];
+            if (paramValue.toLowerCase() === 'me' || paramValue.toLowerCase() === 'i') {
+                toolParams[key] = currentUser.name;
+            } else if (paramValue.startsWith('@')) {
+                toolParams[key] = paramValue.substring(1);
+            }
         }
       }
       
