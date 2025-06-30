@@ -9,6 +9,7 @@ import GraphCanvas from "@/Components/graph/GraphCanvas";
 import QueryProcessor, { generateBioSummary } from "@/Components/analytics/QueryProcessor";
 import { Mention } from "@/types/mentions";
 import { supabaseClient } from "@/integrations/supabase-client";
+import ParticipantSearch from "@/Components/graph/ParticipantSearch";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -24,6 +25,8 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [bioSummary, setBioSummary] = useState({ isLoading: false, content: '' });
+  const [participantList, setParticipantList] = useState<{id: string, name: string}[]>([]);
+  const graphRef = useRef<any>(null);
 
   const connectionStats = useMemo(() => {
     if (!selectedPerson) return { count: 0, types: 0 };
@@ -84,9 +87,13 @@ export default function ChatPage() {
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      const { nodes, connections } = await getHybridGraphData();
+      const [{ nodes, connections }, names] = await Promise.all([
+        getHybridGraphData(),
+        supabaseClient.getParticipantNames(),
+      ]);
 
       setGraphData({ nodes, connections });
+      setParticipantList(names || []);
 
       // Find and set "Matthew Smith" as the current user
       const matthewSmith = nodes.find(node => node.id === "eldar-refael-hacohen-58b4b018a" || node.name === "Matthew Smith");
@@ -98,7 +105,7 @@ export default function ChatPage() {
         setCurrentUser(nodes[0]);
       }
     } catch (error) {
-      console.error('Error loading graph data:', error);
+      console.error('Error loading initial data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -289,6 +296,31 @@ Click on any person in the graph to mention them in your message!`,
     setGraphPanelWidth(prev => prev === 20 ? 50 : 20);
   };
 
+  const handleParticipantSelect = (participant: { id: string; name: string }) => {
+    const person = graphData.nodes.find(n => n.id === participant.id);
+    if (!person) {
+        console.warn(`Participant with id ${participant.id} not found in graphData.nodes`);
+        return;
+    }
+
+    // Open the detail card for the selected person
+    setSelectedPerson(person);
+
+    // Find the node in the currently rendered graph instance to get its coordinates
+    const graphInstance = graphRef.current?.getGraphInstance();
+    if (!graphInstance) return;
+
+    const renderedNode = graphInstance.graphData().nodes.find((n: any) => n.id === participant.id);
+
+    // If the node is in the rendered graph, zoom to it
+    if (renderedNode && typeof renderedNode.x === 'number' && typeof renderedNode.y === 'number') {
+        graphRef.current.centerAt(renderedNode.x, renderedNode.y, 1000);
+        graphRef.current.zoom(4, 500);
+    } else {
+        console.warn(`Node ${participant.name} is not in the current ego-graph view, cannot zoom.`);
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-5rem)] flex bg-background text-foreground">
       {/* Chat Panel */}
@@ -326,7 +358,7 @@ Click on any person in the graph to mention them in your message!`,
               animate={{ opacity: 1 }}
               className="flex gap-3"
             >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted dark:bg-gradient-to-r dark:from-purple-500 dark:to-pink-600">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted dark:bg-gradient-to-r">
                 <div className="w-4 h-4 border-2 rounded-full animate-spin border-muted-foreground/30 border-t-muted-foreground"></div>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -378,6 +410,12 @@ Click on any person in the graph to mention them in your message!`,
         
         {/* Canvas */}
         <div className="flex-1 min-h-0 relative">
+          <div className="absolute top-4 left-4 w-72 z-20">
+            <ParticipantSearch
+              participantList={participantList}
+              onParticipantSelect={handleParticipantSelect}
+            />
+          </div>
           <AnimatePresence>
             {graphPanelWidth > 0 && (
               <motion.div 
@@ -388,6 +426,7 @@ Click on any person in the graph to mention them in your message!`,
                 transition={{ duration: 0.3 }}
               >
                 <GraphCanvas
+                  ref={graphRef}
                   nodes={graphData.nodes}
                   connections={graphData.connections}
                   highlightedNodeIds={highlightedNodeIds}

@@ -1,8 +1,10 @@
 // @ts-nocheck
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { Person, Connection } from "@/Entities/all";
 import GraphCanvas from "../Components/graph/GraphCanvas";
+import ParticipantSearch from "@/Components/graph/ParticipantSearch";
 import { getHybridGraphData } from "@/services/hybridDataService";
+import { supabaseClient } from '@/integrations/supabase-client';
 import { Button } from "@/Components/ui/button";
 import { Input } from "@/Components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/Components/ui/select";
@@ -20,9 +22,16 @@ export default function NetworkPage() {
   const [filterType, setFilterType] = useState('all');
   const [selectedNode, setSelectedNode] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [participantList, setParticipantList] = useState([]);
+  const graphRef = useRef();
 
   useEffect(() => {
     loadGraphData();
+    const fetchParticipantList = async () => {
+      const names = await supabaseClient.getParticipantNames();
+      setParticipantList(names || []);
+    };
+    fetchParticipantList();
   }, []);
 
   useEffect(() => {
@@ -83,6 +92,31 @@ export default function NetworkPage() {
     setSelectedNode(node);
   };
 
+  const handleParticipantSelect = (participant) => {
+    if (!graphRef.current) return;
+
+    const node = graphData.nodes.find(n => n.id === participant.id);
+    if (node) {
+      // Force-graph simulation needs to run to assign x/y coords.
+      // We can recenter after a short delay if coords aren't available.
+      if (typeof node.x === 'number' && typeof node.y === 'number') {
+        graphRef.current.centerAt(node.x, node.y, 1000);
+        graphRef.current.zoom(4, 500);
+      } else {
+        // Fallback if the node doesn't have coordinates yet
+        console.warn("Node coordinates not available yet. The graph may not center correctly.");
+        setTimeout(() => {
+            const updatedNode = graphRef.current?.getGraphInstance().graphData().nodes.find(n => n.id === participant.id);
+            if(updatedNode && typeof updatedNode.x === 'number' && typeof updatedNode.y === 'number') {
+                 graphRef.current.centerAt(updatedNode.x, updatedNode.y, 1000);
+                 graphRef.current.zoom(4, 500);
+            }
+        }, 500);
+      }
+      handleNodeClick(node.id);
+    }
+  };
+
   const getNodeStats = (nodeId) => {
     const connections = graphData.connections.filter(conn =>
       conn.person_a_id === nodeId || conn.person_b_id === nodeId
@@ -129,13 +163,10 @@ export default function NetworkPage() {
 
         {/* Search and Filter Controls */}
         <div className="flex gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Search people, institutions, or expertise areas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-slate-800/50 border-slate-700/50 text-white placeholder-slate-400"
+          <div className="flex-1">
+            <ParticipantSearch
+              participantList={participantList}
+              onParticipantSelect={handleParticipantSelect}
             />
           </div>
           
@@ -158,6 +189,7 @@ export default function NetworkPage() {
         {/* Graph Canvas */}
         <div className="flex-1 h-full min-w-0">
           <GraphCanvas
+            ref={graphRef}
             nodes={filteredData.nodes}
             connections={filteredData.connections}
             highlightedNodeIds={selectedNode ? [selectedNode.id] : []}

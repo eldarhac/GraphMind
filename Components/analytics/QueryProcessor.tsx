@@ -694,52 +694,33 @@ export default class QueryProcessor {
         return { explanation: "Could not retrieve full details for one or both individuals to compare.", message: "Could not retrieve full details for one or both individuals to compare." };
     }
 
-    // Now, generate the explanation using an LLM.
-    const experienceA = personADetails.experience ? JSON.stringify(personADetails.experience, null, 2) : '[]';
-    const educationA = personADetails.education ? JSON.stringify(personADetails.education, null, 2) : '[]';
-    const experienceB = personBDetails.experience ? JSON.stringify(personBDetails.experience, null, 2) : '[]';
-    const educationB = personBDetails.education ? JSON.stringify(personBDetails.education, null, 2) : '[]';
+    // Instead of sending raw JSON, generate concise summaries first.
+    const [summaryA, summaryB] = await Promise.all([
+        generateBioSummary({ 
+            name: personADetails.name, 
+            experience: personADetails.experience || [], 
+            education: personADetails.education || [] 
+        }),
+        generateBioSummary({ 
+            name: personBDetails.name, 
+            experience: personBDetails.experience || [], 
+            education: personBDetails.education || [] 
+        })
+    ]);
 
     const prompt = `
-        You are a professional analyst. Your task is to explain why ${personADetails.name} and ${personBDetails.name} have similar professional profiles, based ONLY on the data provided.
-        Your response MUST use their full names. Do NOT use placeholders like "Person A" or "Person B".
+        You are a professional analyst. Your task is to explain why ${personADetails.name} and ${personBDetails.name} have similar professional profiles, based on the following summaries of their careers.
 
-        The 'experience' and 'education' fields are provided as JSON arrays. You must parse them to analyze their contents.
+        **Summary for ${personADetails.name}**:
+        ${summaryA}
 
-        'experience' JSON schema:
-        [{
-          "title": "Job Title",
-          "company": "Company Name",
-          "start_year": YYYY,
-          "end_year": YYYY | "Present"
-        }]
-
-        'education' JSON schema:
-        [{
-          "degree": "Degree Name",
-          "school": "School Name",
-          "start_year": YYYY,
-          "end_year": YYYY
-        }]
-
-        **Information for ${personADetails.name}**:
-        Title: ${personADetails.title}
-        Experience:
-        ${experienceA}
-        Education:
-        ${educationA}
-
-        **Information for ${personBDetails.name}**:
-        Title: ${personBDetails.title}
-        Experience:
-        ${experienceB}
-        Education:
-        ${educationB}
+        **Summary for ${personBDetails.name}**:
+        ${summaryB}
 
         **Analysis Task:**
-        Write a concise, 2-3 sentence explanation highlighting the key similarities in their careers. You can compare their job titles, companies, industries, schools, or fields of study.
-        Look for overlaps in timelines or similar career trajectories.
-        Remember to use their names, ${personADetails.name} and ${personBDetails.name}, in your response.
+        Write a concise, 2-3 sentence explanation highlighting the key similarities based on the provided summaries.
+        Focus on common themes in their careers, roles, or areas of expertise.
+        Remember to use their full names in your response.
 
         **Generated Explanation:**
     `;

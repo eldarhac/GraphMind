@@ -275,6 +275,24 @@ async function getParticipantById(personId: string): Promise<Person | null> {
   }
 }
 
+async function getParticipantNames() {
+  if (!supabaseUrl || !supabaseAnonKey) return [];
+  try {
+    const { data, error } = await supabase
+      .from('participants2')
+      .select('id, name')
+      .order('name', { ascending: true });
+    if (error) {
+      console.error('Error fetching participant names:', error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('Unexpected error fetching participant names:', err);
+    return [];
+  }
+}
+
 export const supabaseClient = {
     getParticipantDetails,
     getParticipantById,
@@ -284,4 +302,5 @@ export const supabaseClient = {
     getAvatars,
     getGraphData,
     getSimilarParticipants,
+    getParticipantNames,
 };

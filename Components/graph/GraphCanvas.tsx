@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo, useImperativeHandle, forwardRef } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 type NodeObject = any;
 type LinkObject = any;
@@ -52,7 +52,7 @@ interface GraphCanvasProps {
   currentUser?: Person | null;
 }
 
-export default function GraphCanvas({
+const GraphCanvas = forwardRef<any, GraphCanvasProps>(({
   nodes = [],
   connections = [],
   highlightedNodeIds = [],
@@ -60,11 +60,23 @@ export default function GraphCanvas({
   onNodeClick,
   onBackgroundClick,
   currentUser,
-}: GraphCanvasProps) {
+}, ref) => {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [avatarImages, setAvatarImages] = useState<Record<string, HTMLImageElement>>({});
+
+  useImperativeHandle(ref, () => ({
+    zoom: (factor: number, duration: number) => {
+      fgRef.current?.zoom(factor, duration);
+    },
+    centerAt: (x: number, y: number, duration: number) => {
+      fgRef.current?.centerAt(x, y, duration);
+    },
+    getGraphInstance: () => {
+      return fgRef.current;
+    }
+  }));
 
   useEffect(() => {
     const observer = new ResizeObserver(entries => {
@@ -420,4 +432,6 @@ export default function GraphCanvas({
       )}
     </div>
   );
-}
+});
+
+export default GraphCanvas;

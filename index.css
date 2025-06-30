@@ -27,6 +27,7 @@
     --card-foreground: 210 20% 98%; /* slate-50 */
     --muted: 217 33% 17%; /* slate-800 */
     --muted-foreground: 215 20% 65%; /* slate-400 */
+    --placeholder: 215 20% 80%; /* Brighter slate-300 equivalent */
     --primary: 217 91% 60%; /* blue-500 */
     --primary-foreground: 210 40% 98%;
     --border: 217 33% 17%; /* slate-800 */
