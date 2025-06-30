@@ -317,13 +317,13 @@ export default function GraphCanvas({
 
   const nodePointerAreaPaint = useCallback((node: NodeObject, color: string, ctx: CanvasRenderingContext2D) => {
     const graphNode = node as GraphNode;
-    const { x, y, level } = graphNode;
+    const { x, y, level, isHighlighted } = graphNode;
 
     if (x === undefined || y === undefined) return;
 
     const nodeLevel = level ?? 0;
     const radii = [30, 1, 1, 1, 1];
-    const radius = radii[nodeLevel] ?? 1;
+    const radius = isHighlighted ? (radii[nodeLevel] ?? 1) * 1.2 : (radii[nodeLevel] ?? 1);
     const interactiveRadius = radius * 1.5;
 
     ctx.fillStyle = color;
