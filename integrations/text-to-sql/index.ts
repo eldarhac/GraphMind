@@ -45,18 +45,18 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
           - SQL: SELECT DISTINCT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%[School]%'
           - Example: SELECT DISTINCT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%MIT%'
 
-      5.  **"Where did [Person] work?"**:
-          - SQL: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
-          - Example: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
+      5.  **"How many people worked at [Company]?"**:
+          - SQL: SELECT COUNT(DISTINCT p.id) FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%[Company]%';
+          - Example: SELECT COUNT(DISTINCT p.id) FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%Google%';
 
-      6.  **"Where did [Person] study?"**:
-          - SQL: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
+      6.  **"Where did [Person] work?"**:
+          - SQL: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
           - Example: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
 
       **Your Task:**
-      -   You MUST generate a single-line, valid PostgreSQL SELECT query based on the user's question.
-      -   Use ILIKE for case-insensitive text matching.
-      -   Do not use semicolons or newlines.
+      -   You MUST generate a valid PostgreSQL SELECT query based on the user's question.
+      -   The SQL query MUST end with a semicolon (';').
+      -   There should be NO text, explanation, or markdown after the semicolon.
       -   Output only the raw SQL query.
     `;
 
@@ -64,7 +64,7 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
         You are an expert SQL generator. Your task is to convert the following natural language query into a single-line PostgreSQL query.
         - You MUST use the conversation history to understand context and resolve references.
         - For example, if the history is "User: How many people worked at Google?" and the current query is "How many of them studied Computer Science?", you MUST generate a query that filters for people who both worked at Google AND studied Computer Science. The generated query should combine conditions from the history with the current query.
-        - **IMPORTANT**: When asked to list people, use \`SELECT DISTINCT\` to prevent duplicates.
+        - **IMPORTANT**: When asked to list people, use \`SELECT DISTINCT\` to prevent duplicates. For counting, use \`COUNT(DISTINCT p.id)\`.
         - You MUST follow the provided schema and querying rules precisely.
 
         **Schema & Rules:**
@@ -96,10 +96,15 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
             }
         }
 
-        // The LLM may format the SQL across multiple lines. To handle this,
-        // we will replace all newline characters with spaces to flatten the query
-        // into the single line that our system expects.
-        sqlQuery = sqlQuery.replace(/[\r\n]/g, ' ');
+        // The LLM may format the SQL across multiple lines. We'll flatten it.
+        sqlQuery = sqlQuery.replace(/[\r\n]/g, ' ').trim();
+
+        // The LLM sometimes adds an explanation after the query. We will look for
+        // the terminating semicolon and strip out anything that comes after it.
+        const semiColonIndex = sqlQuery.indexOf(';');
+        if (semiColonIndex > -1) {
+            sqlQuery = sqlQuery.substring(0, semiColonIndex);
+        }
 
         // Before executing, perform a basic safety check.
         const normalizedQuery = sqlQuery.trim().toUpperCase();
