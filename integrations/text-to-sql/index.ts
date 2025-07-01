@@ -35,19 +35,21 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
           - Join \`participants2\` and \`participant_experience\` on \`participants2.id = participant_experience.participant_id\`.
           - Join \`participants2\` and \`participant_education\` on \`participants2.id = participant_education.participant_id\`.
 
-      2.  **"Who worked at [Company]?"**:
-          - SQL: SELECT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%[Company]%'
-          - Example: SELECT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%Google%'
+      2.  **Avoid Duplicate People**: A person can have multiple jobs or degrees, creating multiple rows. When a query asks for a list of *people*, you MUST use \`SELECT DISTINCT p.name\` to return unique individuals.
 
-      3.  **"Who studied at [School]?"**:
-          - SQL: SELECT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%[School]%'
-          - Example: SELECT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%MIT%'
+      3.  **"Who worked at [Company]?"**:
+          - SQL: SELECT DISTINCT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%[Company]%'
+          - Example: SELECT DISTINCT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%Google%'
 
-      4.  **"Where did [Person] work?"**:
+      4.  **"Who studied at [School]?"**:
+          - SQL: SELECT DISTINCT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%[School]%'
+          - Example: SELECT DISTINCT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%MIT%'
+
+      5.  **"Where did [Person] work?"**:
           - SQL: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
           - Example: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
 
-      5.  **"Where did [Person] study?"**:
+      6.  **"Where did [Person] study?"**:
           - SQL: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
           - Example: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
 
@@ -60,8 +62,10 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
 
     const prompt = `
         You are an expert SQL generator. Your task is to convert the following natural language query into a single-line PostgreSQL query.
-        You MUST use the conversation history to resolve pronouns and references. For example, if the user says "among them", you must look at the history to understand what "them" refers to.
-        You MUST follow the provided schema and querying rules precisely.
+        - You MUST use the conversation history to understand context and resolve references.
+        - For example, if the history is "User: How many people worked at Google?" and the current query is "How many of them studied Computer Science?", you MUST generate a query that filters for people who both worked at Google AND studied Computer Science. The generated query should combine conditions from the history with the current query.
+        - **IMPORTANT**: When asked to list people, use \`SELECT DISTINCT\` to prevent duplicates.
+        - You MUST follow the provided schema and querying rules precisely.
 
         **Schema & Rules:**
         ${tableSchema}
@@ -91,6 +95,11 @@ export async function processTextToSqlQuery(query: string, chatHistory?: string)
                 sqlQuery = sqlQuery.substring(selectIndex);
             }
         }
+
+        // The LLM may format the SQL across multiple lines. To handle this,
+        // we will replace all newline characters with spaces to flatten the query
+        // into the single line that our system expects.
+        sqlQuery = sqlQuery.replace(/[\r\n]/g, ' ');
 
         // Before executing, perform a basic safety check.
         const normalizedQuery = sqlQuery.trim().toUpperCase();

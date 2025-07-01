@@ -24,10 +24,10 @@ export default function ChatInput({
   const [cursorPosition, setCursorPosition] = useState(0);
 
   const suggestions = [
-    "How can I reach Jeff Bezos?",
-    "Who are the top AI researchers?",
-    "Show me people similar to Dr. Musk",
-    "Who is currently working at Google?"
+    "How many people worked at Google?",
+    "Suggest potential connections for Kevin Patterson",
+    "How is Jonathan Jacobs similar to Jason Williams?",
+    "How can I reach Mark Sullivan?"
   ];
 
   // Insert mention at cursor position when a new mention is pending

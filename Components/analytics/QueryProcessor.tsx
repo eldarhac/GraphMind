@@ -112,8 +112,10 @@ export default class QueryProcessor {
 
         **Critical Rules & Context:**
         - The current user's name is "${currentUser.name}".
-        - You MUST ONLY replace pronouns like "me", "I", or "my" with "${currentUser.name}".
-        - If the user's query mentions specific names, you MUST use those exact names in the tool parameters. DO NOT substitute a person's name with the current user's name. For example, if the query is "compare Person X and Person Y", the parameters should be for "Person X" and "Person Y", not the current user.
+        - **IMPORTANT**: Do NOT use the current user's name ("${currentUser.name}") as a parameter unless the query explicitly uses a pronoun like "me", "I", or "my".
+        - For all other cases, you MUST extract the names of people directly from the user's query.
+        - Example 1: If the query is "How am I similar to Sandra Bartlett?", you should use "${currentUser.name}" and "Sandra Bartlett".
+        - Example 2: If the query is "How is Ryan Nicholson similar to Sandra Bartlett?", you MUST use "Ryan Nicholson" and "Sandra Bartlett". DO NOT use the current user's name.
         - You have access to a graph of people and their connections, and a relational database with their profile details.
 
         **Conversation History:**
