@@ -1,7 +1,7 @@
 import { InvokeLLM } from '../invoke-llm';
 import { executeSql } from '../supabase-client';
 
-export async function processTextToSqlQuery(query: string): Promise<string> {
+export async function processTextToSqlQuery(query: string, chatHistory?: string): Promise<string> {
     const tableSchema = `
       You have access to three tables:
 
@@ -60,10 +60,14 @@ export async function processTextToSqlQuery(query: string): Promise<string> {
 
     const prompt = `
         You are an expert SQL generator. Your task is to convert the following natural language query into a single-line PostgreSQL query.
+        You MUST use the conversation history to resolve pronouns and references. For example, if the user says "among them", you must look at the history to understand what "them" refers to.
         You MUST follow the provided schema and querying rules precisely.
 
         **Schema & Rules:**
         ${tableSchema}
+
+        **Conversation History:**
+        ${chatHistory || 'No history provided.'}
 
         **User Query:**
         "${query}"
@@ -107,7 +111,7 @@ export async function processTextToSqlQuery(query: string): Promise<string> {
         }
 
         // Now, generate a final, user-friendly answer.
-        const finalAnswer = await generateFinalAnswer(query, results.data);
+        const finalAnswer = await generateFinalAnswer(query, results.data, chatHistory);
         return finalAnswer;
     } catch (error: any) {
         console.error('Error processing text-to-SQL:', error);
@@ -116,10 +120,16 @@ export async function processTextToSqlQuery(query: string): Promise<string> {
     }
 }
 
-async function generateFinalAnswer(question: string, data: any[]): Promise<string> {
+async function generateFinalAnswer(question: string, data: any[], chatHistory?: string): Promise<string> {
     const prompt = `
-        You are a helpful assistant. Based on the user's question and the retrieved database data, provide a concise, natural language answer.
-        If the data is a complex JSON object, summarize it clearly. For example, if you get a JSON object with a list of schools, list them out.
+        You are a helpful assistant who provides concise and factual answers based on the provided data.
+        - **IMPORTANT**: Your response must be direct and factual. Do not use conversational filler or phrases like "I believe", "it appears that", or "based on our conversation".
+        - Silently use the conversation history to understand context and resolve references like "them" or "they". Do not mention that you are using the history. Instead, incorporate the context directly into your answer.
+        - For example, if the user asks about "them" and the history is about people from Google, your answer should start with "For participants who worked at Google, ..." instead of "Based on the history, 'them' refers to...".
+        - Summarize complex data clearly.
+
+        **Conversation History:**
+        ${chatHistory || "No history provided"}
 
         **Original Question:**
         "${question}"

@@ -182,7 +182,7 @@ export default class QueryProcessor {
       // Step 2: Execute the selected tool
       switch (toolName) {
         case "answer_relational_question":
-          responseText = await processTextToSqlQuery(toolParams.question);
+          responseText = await processTextToSqlQuery(toolParams.question, chatContext);
           result = { nodes: [], connections: [], insights: [] }; // No graph action for now
           break;
         case "answer_graph_question":
