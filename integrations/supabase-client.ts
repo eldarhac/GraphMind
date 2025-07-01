@@ -99,12 +99,11 @@ async function getParticipantDetails(personName: string): Promise<Person[] | nul
     
     if (!data) return [];
 
-    // Safely parse JSON string fields for each returned person
+    // The 'experience' and 'education' fields are no longer in this table as JSON.
     const parsedData = data.map((person: any) => ({
       ...person,
-      experience: safeJsonParse(person.experience),
-      education: safeJsonParse(person.education),
-      publications: safeJsonParse(person.publications),
+      experience: [], // Default to empty array, can be fetched on-demand
+      education: [], // Default to empty array, can be fetched on-demand
     }));
 
     return parsedData as Person[];
@@ -113,70 +112,6 @@ async function getParticipantDetails(personName: string): Promise<Person[] | nul
     return null;
   }
 }
-
-function safeJsonParse(value: any): any[] {
-  if (!value) {
-    return [];
-  }
-  // If it's already an array, return it.
-  if (Array.isArray(value)) {
-    return value;
-  }
-  // If it's a string, try to parse it.
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      // Ensure the parsed result is an array.
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (e) {
-      console.warn('Failed to parse JSON string:', value, e);
-      return [];
-    }
-  }
-  // If it's some other type (like a single object that's not an array), return empty array.
-  // This is because we expect a list of experiences/educations.
-  return [];
-}
-
-// This function is no longer needed, as the logic will be moved into the database.
-/*
-async function executeSqlQuery(sql: string): Promise<any[] | null> {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
-
-  try {
-    const { data, error } = await supabase.rpc('execute_readonly_sql', { query: sql });
-
-    if (error) {
-      console.error('Error executing SQL query via RPC:', error);
-      // Attempt to return a more helpful error message to the front-end
-      return [{ error: `Database error: ${error.message}` }];
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('An unexpected error occurred during RPC call:', error);
-    return [{ error: 'An unexpected error occurred.' }];
-  }
-}
-*/
-
-// The text_to_sql RPC call is no longer needed with this approach.
-/*
-async function textToSql(question: string): Promise<any> {
-    if (!supabaseUrl || !supabaseAnonKey) return null;
-    try {
-        const { data, error } = await supabase.rpc('text_to_sql', { question });
-        if (error) {
-            console.error('Error with text_to_sql RPC:', error);
-            return { error: `Database error: ${error.message}` };
-        }
-        return data;
-    } catch (error) {
-        console.error('An unexpected error occurred during text_to_sql RPC call:', error);
-        return { error: 'An unexpected error occurred.' };
-    }
-}
-*/
 
 export async function executeSql(query: string) {
   try {
@@ -248,27 +183,52 @@ async function getParticipantById(personId: string): Promise<Person | null> {
   if (!supabaseUrl || !supabaseAnonKey) return null;
 
   try {
-    const { data, error } = await supabase
+    const { data: personData, error: personError } = await supabase
       .from('participants2')
       .select('*')
       .eq('id', personId)
-      .single(); // Fetch a single record
+      .single();
 
-    if (error) {
-      console.error('Error fetching participant by ID from Supabase:', error);
+    if (personError) {
+      console.error('Error fetching participant by ID from Supabase:', personError);
       return null;
     }
     
-    if (!data) return null;
+    if (!personData) return null;
 
-    // Safely parse JSON string fields
-    const parsedData = {
-      ...data,
-      experience: safeJsonParse(data.experience),
-      education: safeJsonParse(data.education),
+    const { data: experienceData, error: experienceError } = await supabase
+      .from('participant_experience')
+      .select('*')
+      .eq('participant_id', personId);
+      
+    if (experienceError) {
+      console.error('Error fetching participant experience:', experienceError);
+      return null;
+    }
+
+    const { data: educationData, error: educationError } = await supabase
+      .from('participant_education')
+      .select('*')
+      .eq('participant_id', personId);
+
+    if (educationError) {
+      console.error('Error fetching participant education:', educationError);
+      return null;
+    }
+
+    const person: Person = {
+      ...personData,
+      experience: experienceData || [],
+      education: educationData || [],
+      // Ensure all required fields from the Person interface are present
+      title: personData.title || personData.current_company_name || '',
+      profile_picture_url: personData.profile_picture_url || '',
+      linkedin_url: personData.linkedin_url || '',
+      expertise_areas: personData.expertise_areas || [],
     };
 
-    return parsedData as Person;
+    return person;
+
   } catch (error) {
     console.error('An unexpected error occurred while fetching participant by ID:', error);
     return null;

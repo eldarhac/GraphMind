@@ -7,6 +7,9 @@ export interface Person {
   name: string;
   title: string;
   company?: string;
+  current_company_name?: string;
+  current_company_id?: string;
+  education_details?: string;
   institution?: string;
   email?: string;
   profile_picture_url: string;
@@ -29,22 +32,11 @@ export interface Person {
 }
 
 export interface Experience {
+  participant_id: string;
+  company: string;
   title: string;
-  company?: string;
-  institution?: string; // Can be used for non-company affiliations
-  description?: string;
-  start_year?: number | string;
-  end_year?: number | string;
-  start_date?: string;
-  end_date?: string;
-  type?: 'WORK' | 'STUDY' | 'VOLUNTEERING'; // Example types
-  positions?: Position[];
-  url?: string;
-  location?: string;
-  company_id?: string;
-  company_logo_url?: string;
-  description_html?: string;
-  duration?: string;
+  start_date: string;
+  end_date: string;
 }
 
 export interface Position {
@@ -59,11 +51,11 @@ export interface Position {
 }
 
 export interface Education {
-    degree: string;
-    school: string;
-    title?: string; // 'title' seems to be used for school in some places
-    start_year?: number | string;
-    end_year?: number | string;
+  participant_id: string;
+  school: string;
+  field: string;
+  start_year: number;
+  end_year: number;
 }
 
 export interface Connection {
@@ -176,7 +168,8 @@ export class Person extends BaseModel {
         const transformedData = data.map((participant: any) => ({
             id: participant.id?.toString() || Math.random().toString(),
             name: participant.name || 'Unknown',
-            title: participant.current_project || 'No title available',
+            title: participant.current_company_name || 'No title available',
+            current_company_name: participant.current_company_name,
             institution: 'Unknown Institution', // Add if available in your schema
             email: participant.email || '',
             profile_picture_url: 'https://randomuser.me/api/portraits/men/1.jpg', // Default image

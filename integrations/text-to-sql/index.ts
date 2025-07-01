@@ -3,27 +3,57 @@ import { executeSql } from '../supabase-client';
 
 export async function processTextToSqlQuery(query: string): Promise<string> {
     const tableSchema = `
+      You have access to three tables:
+
       Table: participants2
-      Columns for Querying:
+      Relevant Columns:
+      - id: TEXT (Primary Key, LinkedIn profile ID)
       - name: TEXT (The full name of the person)
-      - experience: JSONB (Array of past jobs, each with a "company" key. e.g., [{"company": "Google", "title": "Engineer"}])
-      - education: JSONB (Array of educational institutions, each with a "school" key. e.g., [{"school": "MIT", "degree": "BS"}])
+      - current_company_name: TEXT
+      - current_company_id: TEXT
+      - education_details: TEXT
+      - embedding: vector (IGNORE for SQL queries)
+
+      Table: participant_experience
+      Relevant Columns:
+      - participant_id: TEXT (Foreign Key to participants2.id)
+      - company: TEXT
+      - title: TEXT
+      - start_date: TEXT (e.g., "Feb 2020")
+      - end_date: TEXT (e.g., "Jan 2024" or "Present")
+
+      Table: participant_education
+      Relevant Columns:
+      - participant_id: TEXT (Foreign Key to participants2.id)
+      - school: TEXT
+      - field: TEXT (Field of study)
+      - start_year: INT4 (e.g., 2021)
+      - end_year: INT4 (e.g., 2024)
 
       **CRITICAL QUERYING RULES:**
-      1.  **"Who worked at [Company]?"**: Find people whose 'experience' contains the company.
-          - Use: \`jsonb_path_exists(experience, '$[*] ? (@.company like_regex "[Company]" flag "i")')\`
-          - Example: SELECT name FROM participants2 WHERE jsonb_path_exists(experience, '$[*] ? (@.company like_regex "Google" flag "i")')
+      1.  **Joins are ESSENTIAL.** You MUST join tables to answer questions about experience or education.
+          - Join \`participants2\` and \`participant_experience\` on \`participants2.id = participant_experience.participant_id\`.
+          - Join \`participants2\` and \`participant_education\` on \`participants2.id = participant_education.participant_id\`.
 
-      2.  **"Who studied at [School]?"**: Find people whose 'education' contains the school.
-          - Use: \`jsonb_path_exists(education, '$[*] ? (@.school like_regex "[School]" flag "i")')\`
-          - Example: SELECT name FROM participants2 WHERE jsonb_path_exists(education, '$[*] ? (@.school like_regex "MIT" flag "i")')
+      2.  **"Who worked at [Company]?"**:
+          - SQL: SELECT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%[Company]%'
+          - Example: SELECT p.name FROM participants2 p JOIN participant_experience pe ON p.id = pe.participant_id WHERE pe.company ILIKE '%Google%'
 
-      3.  **"Where did [Person] study/work?"**: Retrieve the 'education' or 'experience' data for a specific person.
-          - Use: \`ILIKE\` on the 'name' column.
-          - Example: SELECT education FROM participants2 WHERE name ILIKE '%Sandra Buchanan%'
+      3.  **"Who studied at [School]?"**:
+          - SQL: SELECT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%[School]%'
+          - Example: SELECT p.name FROM participants2 p JOIN participant_education ped ON p.id = ped.participant_id WHERE ped.school ILIKE '%MIT%'
+
+      4.  **"Where did [Person] work?"**:
+          - SQL: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
+          - Example: SELECT pe.company, pe.title, pe.start_date, pe.end_date FROM participant_experience pe JOIN participants2 p ON pe.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
+
+      5.  **"Where did [Person] study?"**:
+          - SQL: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%[Person Name]%'
+          - Example: SELECT ped.school, ped.field, ped.start_year, ped.end_year FROM participant_education ped JOIN participants2 p ON ped.participant_id = p.id WHERE p.name ILIKE '%Sandra Buchanan%'
 
       **Your Task:**
       -   You MUST generate a single-line, valid PostgreSQL SELECT query based on the user's question.
+      -   Use ILIKE for case-insensitive text matching.
       -   Do not use semicolons or newlines.
       -   Output only the raw SQL query.
     `;
@@ -50,6 +80,12 @@ export async function processTextToSqlQuery(query: string): Promise<string> {
         const match = sqlQuery.match(/```(?:sql)?\n([\s\S]*?)\n```/);
         if (match && match[1]) {
             sqlQuery = match[1].trim();
+        } else {
+            // If no markdown, try to find the SELECT statement directly, ignoring preamble text.
+            const selectIndex = sqlQuery.toUpperCase().indexOf('SELECT');
+            if (selectIndex !== -1) {
+                sqlQuery = sqlQuery.substring(selectIndex);
+            }
         }
 
         // Before executing, perform a basic safety check.
