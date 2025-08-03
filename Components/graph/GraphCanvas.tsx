@@ -407,7 +407,7 @@ const GraphCanvas = forwardRef<any, GraphCanvasProps>(({
       </div>
 
       {/* Connection Legend */}
-      <div className="absolute bottom-4 right-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border px-4 py-2">
+      <div className="absolute top-4 right-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border px-4 py-2">
         <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-2">Connection Legend</h4>
         <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -430,6 +430,9 @@ const GraphCanvas = forwardRef<any, GraphCanvasProps>(({
           </div>
         </div>
       )}
+      <div className="absolute bottom-2 right-4 text-xs text-muted-foreground">
+        © Created by Eldar Hacohen, 2025
+      </div>
     </div>
   );
 });
